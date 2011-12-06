@@ -418,12 +418,17 @@ public class InterfaceProcessor extends AbstractProcessor {
         String className = domain.className();
         if(className.isEmpty()) {
             if(definition.getMethods().isEmpty()) {
-                return "Default" + capitalize(interfaceName);
+                return getClassNamePrefix() + capitalize(interfaceName) + getClassNameSuffix();
             } else {
-                return "Abstract" + capitalize(interfaceName);
+                return getAbstractClassNamePrefix() + capitalize(interfaceName) + getAbstractClassNameSuffix();
             }
         } else {
             return className;
         }
     }
+    
+    protected String getClassNamePrefix() { return "Default"; }
+    protected String getClassNameSuffix() { return ""; }
+    protected String getAbstractClassNamePrefix() { return "Abstract"; }
+    protected String getAbstractClassNameSuffix() { return getClassNameSuffix(); }
 }
