@@ -35,6 +35,8 @@ public interface InterfaceDefinition {
     Collection<Property> getProperties();
     void addProperties(Property... props);
     Property findProperty(String name, TypeMirror type, Types types);
+    
+    boolean isHavingIgnoredProperty();
 
     Collection<ExecutableElement> getMethods();
     void addMethods(ExecutableElement... methods);

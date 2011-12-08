@@ -30,4 +30,5 @@ import java.lang.annotation.Target;
 public @interface Property {
     RetainType retainType() default RetainType.HOLD;
     Class<?> realType() default Void.class;
+    boolean ignore() default false;
 }

@@ -103,4 +103,11 @@ public class DefaultInterfaceDefinition implements InterfaceDefinition {
         if(parameters == null) return;
         this.typeParameters.addAll(Arrays.asList(parameters));
     }
+
+    public boolean isHavingIgnoredProperty() {
+        for (Property property : getProperties()) {
+            if(property.isIgnored()) return true;
+        }
+        return false;
+    }
 }

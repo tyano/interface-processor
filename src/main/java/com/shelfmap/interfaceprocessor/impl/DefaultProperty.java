@@ -30,6 +30,7 @@ public class DefaultProperty implements Property {
     private final TypeMirror type;
     private String retainType = "HOLD";
     private TypeMirror realType;
+    private boolean ignore;
 
     public DefaultProperty(String name, TypeMirror type, boolean readable, boolean writable) {
         this.name = name;
@@ -86,5 +87,13 @@ public class DefaultProperty implements Property {
     @Override
     public void setRealType(TypeMirror type) {
         this.realType = type;
+    }
+
+    public boolean isIgnored() {
+        return ignore;
+    }
+
+    public void setIgnored(boolean ignore) {
+        this.ignore = ignore;
     }
 }

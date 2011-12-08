@@ -35,4 +35,7 @@ public interface Property {
 
     TypeMirror getRealType();
     void setRealType(TypeMirror type);
+    
+    boolean isIgnored();
+    void setIgnored(boolean ignore);
 }

@@ -88,7 +88,8 @@ public class InterfaceProcessor extends AbstractProcessor {
                     shift = generatePropertyAccessors(writer, shift, definition, typeUtils);
                     shift = generateEquals(writer, shift, definition, className);
                     shift = generateHashCode(writer, shift, definition, className);
-
+                    shift = generateToString(writer, shift, definition, className);
+                    
                     writer.append("}");
                     writer.flush();
                 } catch (IOException ex) {
@@ -107,7 +108,7 @@ public class InterfaceProcessor extends AbstractProcessor {
 
         writer.append("package ").append(packageName).append(";\n\n");
         writer.append("@javax.annotation.Generated(value = \"" + this.getClass().getName() + "\", date = \"" + generationTime + "\")\n");
-        writer.append("public ").append(definition.getMethods().isEmpty() ? "" : "abstract ").append("class ").append(className);
+        writer.append("public ").append(definition.getMethods().isEmpty() && !definition.isHavingIgnoredProperty() ? "" : "abstract ").append("class ").append(className);
 
         AnnotationMirror mirror = findAnnotation(element, GenerateClass.class, elementUtils, typeUtils);
         String superClassName = getSuperClassValue(elementUtils, typeUtils, elementUtils.getElementValuesWithDefaults(mirror));
@@ -121,8 +122,10 @@ public class InterfaceProcessor extends AbstractProcessor {
 
     protected int generateFields(Writer writer, int shift, InterfaceDefinition definition) throws IOException {
         for (Property property : definition.getProperties()) {
-            String typeName = property.getType().toString();
-            writer.append(indent(shift)).append("private ").append(typeName).append(" ").append(toSafeName(property.getName())).append(";\n");
+            if(!property.isIgnored()) {
+                String typeName = property.getType().toString();
+                writer.append(indent(shift)).append("private ").append(typeName).append(" ").append(toSafeName(property.getName())).append(";\n");
+            }
         }
         writer.append("\n");
         return shift;
@@ -130,19 +133,21 @@ public class InterfaceProcessor extends AbstractProcessor {
 
     protected int generatePropertyAccessors(Writer writer, int shift, InterfaceDefinition definition, Types typeUtils) throws IOException {
         for (Property property : definition.getProperties()) {
-            String propertyType = property.getType().toString();
-            if(property.isReadable()) {
-                writer.append(indent(shift)).append("@Override\n");
-                writer.append(indent(shift)).append("public ").append(propertyType).append(isBoolean(property.getType(), typeUtils) ? " is" : " get").append(capitalize(property.getName())).append("() {\n");
-                writer.append(indent(++shift)).append("return ").append(retain(property, "this.")).append(";\n");
-                writer.append(indent(--shift)).append("}\n\n");
-            }
+            if(!property.isIgnored()) {
+                String propertyType = property.getType().toString();
+                if(property.isReadable()) {
+                    writer.append(indent(shift)).append("@Override\n");
+                    writer.append(indent(shift)).append("public ").append(propertyType).append(isBoolean(property.getType(), typeUtils) ? " is" : " get").append(capitalize(property.getName())).append("() {\n");
+                    writer.append(indent(++shift)).append("return ").append(retain(property, "this.")).append(";\n");
+                    writer.append(indent(--shift)).append("}\n\n");
+                }
 
-            if(property.isWritable()) {
-                writer.append(indent(shift)).append("@Override\n");
-                writer.append(indent(shift)).append("public void set").append(capitalize(property.getName())).append("(").append(propertyType).append(" ").append(toSafeName(property.getName())).append(") {\n");
-                writer.append(indent(++shift)).append("this.").append(toSafeName(property.getName())).append(" = ").append(retain(property)).append(";\n");
-                writer.append(indent(--shift)).append("}\n\n");
+                if(property.isWritable()) {
+                    writer.append(indent(shift)).append("@Override\n");
+                    writer.append(indent(shift)).append("public void set").append(capitalize(property.getName())).append("(").append(propertyType).append(" ").append(toSafeName(property.getName())).append(") {\n");
+                    writer.append(indent(++shift)).append("this.").append(toSafeName(property.getName())).append(" = ").append(retain(property)).append(";\n");
+                    writer.append(indent(--shift)).append("}\n\n");
+                }
             }
         }
         return shift;
@@ -154,8 +159,10 @@ public class InterfaceProcessor extends AbstractProcessor {
         int readablePropertyCount = 0;
         int writablePropertyCount = 0;
         for (Property property : definition.getProperties()) {
-            if(property.isReadable()) readablePropertyCount++;
-            if(property.isWritable()) writablePropertyCount++;
+            if(!property.isIgnored()) {
+                if(property.isReadable()) readablePropertyCount++;
+                if(property.isWritable()) writablePropertyCount++;
+            }
         }
 
         if(readablePropertyCount >= writablePropertyCount) {
@@ -169,18 +176,22 @@ public class InterfaceProcessor extends AbstractProcessor {
         writer.append(indent(shift)).append("public ").append(className).append("(");
         boolean isFirst = true;
         for (Property property : definition.getProperties()) {
-            String type = property.getType().toString();
-            if(!isFirst) {
-                writer.append(", ");
-            } else {
-                isFirst = false;
+            if(!property.isIgnored()) {
+                String type = property.getType().toString();
+                if(!isFirst) {
+                    writer.append(", ");
+                } else {
+                    isFirst = false;
+                }
+                writer.append(type).append(" ").append(toSafeName(property.getName()));
             }
-            writer.append(type).append(" ").append(toSafeName(property.getName()));
         }
         writer.append(") {\n");
         writer.append(indent(++shift)).append("super();\n");
         for (Property property : definition.getProperties()) {
-            writer.append(indent(shift)).append("this.").append(toSafeName(property.getName())).append(" = ").append(retain(property)).append(";\n");
+            if(!property.isIgnored()) {
+               writer.append(indent(shift)).append("this.").append(toSafeName(property.getName())).append(" = ").append(retain(property)).append(";\n");
+            }
         }
         writer.append(indent(--shift)).append("}\n\n");
         return shift;
@@ -201,22 +212,26 @@ public class InterfaceProcessor extends AbstractProcessor {
         writer.append(indent(shift)).append("public ").append(className).append("(");
         boolean isFirst = true;
         for (Property property : definition.getProperties()) {
-            if(!property.isWritable() && property.isReadable()) {
-                String type = property.getType().toString();
-                if(!isFirst) {
-                    writer.append(", ");
-                } else {
-                    isFirst = false;
+            if(!property.isIgnored()) {
+                if(!property.isWritable() && property.isReadable()) {
+                    String type = property.getType().toString();
+                    if(!isFirst) {
+                        writer.append(", ");
+                    } else {
+                        isFirst = false;
+                    }
+                    writer.append(type).append(" ").append(toSafeName(property.getName()));
                 }
-                writer.append(type).append(" ").append(toSafeName(property.getName()));
             }
         }
         writer.append(") {\n");
         shift++;
         writer.append(indent(shift)).append("super();\n");
         for (Property property : definition.getProperties()) {
-            if(!property.isWritable() && property.isReadable()) {
-                writer.append(indent(shift)).append("this.").append(toSafeName(property.getName())).append(" = ").append(retain(property)).append(";\n");
+            if(!property.isIgnored()) {
+                if(!property.isWritable() && property.isReadable()) {
+                    writer.append(indent(shift)).append("this.").append(toSafeName(property.getName())).append(" = ").append(retain(property)).append(";\n");
+                }
             }
         }
         shift--;
@@ -244,28 +259,30 @@ public class InterfaceProcessor extends AbstractProcessor {
               .append(indent(shift)).append("final ").append(className).append(" other = (").append(className).append(") obj;\n");
 
         for (Property property : definition.getProperties()) {
-            final String fieldName = toSafeName(property.getName());
-            if(isPrimitive(property.getType())) {
-                switch(property.getType().getKind()) {
-                    case FLOAT:
-                        writer.append(indent(shift)).append("if (Float.floatToIntBits(this.").append(fieldName).append(") != Float.floatToIntBits(other.").append(fieldName).append(")) {\n")
-                              .append(indent(++shift)).append("return false;\n")
-                              .append(indent(--shift)).append("}\n");
-                        break;
-                    case DOUBLE:
-                        writer.append(indent(shift)).append("if (Double.doubleToLongBits(this.").append(fieldName).append(") != Double.doubleToLongBits(other.").append(fieldName).append(")) {\n")
-                              .append(indent(++shift)).append("return false;\n")
-                              .append(indent(--shift)).append("}\n");
-                        break;
-                    default:
-                        writer.append(indent(shift)).append("if (this.").append(fieldName).append(" != other.").append(fieldName).append(") {\n")
-                              .append(indent(++shift)).append("return false;\n")
-                              .append(indent(--shift)).append("}\n");
+            if(!property.isIgnored()) {
+                final String fieldName = toSafeName(property.getName());
+                if(isPrimitive(property.getType())) {
+                    switch(property.getType().getKind()) {
+                        case FLOAT:
+                            writer.append(indent(shift)).append("if (Float.floatToIntBits(this.").append(fieldName).append(") != Float.floatToIntBits(other.").append(fieldName).append(")) {\n")
+                                .append(indent(++shift)).append("return false;\n")
+                                .append(indent(--shift)).append("}\n");
+                            break;
+                        case DOUBLE:
+                            writer.append(indent(shift)).append("if (Double.doubleToLongBits(this.").append(fieldName).append(") != Double.doubleToLongBits(other.").append(fieldName).append(")) {\n")
+                                .append(indent(++shift)).append("return false;\n")
+                                .append(indent(--shift)).append("}\n");
+                            break;
+                        default:
+                            writer.append(indent(shift)).append("if (this.").append(fieldName).append(" != other.").append(fieldName).append(") {\n")
+                                .append(indent(++shift)).append("return false;\n")
+                                .append(indent(--shift)).append("}\n");
+                    }
+                } else {
+                    writer.append(indent(shift)).append("if (this.").append(fieldName).append(" != other.").append(fieldName).append(" && (this.").append(fieldName).append(" == null || !this.").append(fieldName).append(".equals(other.").append(fieldName).append("))) {\n")
+                        .append(indent(++shift)).append("return false;\n")
+                        .append(indent(--shift)).append("}\n");
                 }
-            } else {
-                writer.append(indent(shift)).append("if (this.").append(fieldName).append(" != other.").append(fieldName).append(" && (this.").append(fieldName).append(" == null || !this.").append(fieldName).append(".equals(other.").append(fieldName).append("))) {\n")
-                      .append(indent(++shift)).append("return false;\n")
-                      .append(indent(--shift)).append("}\n");
             }
         }
 
@@ -280,34 +297,60 @@ public class InterfaceProcessor extends AbstractProcessor {
               .append(indent(++shift)).append("int result = 17;\n");
 
         for (Property property : definition.getProperties()) {
-            final String fieldName = toSafeName(property.getName());
-            String expression = null;
-            if(isPrimitive(property.getType())) {
-                switch(property.getType().getKind()) {
-                    case FLOAT:
-                        expression = "Float.floatToIntBits(this." + fieldName + ")";
-                        break;
-                    case DOUBLE:
-                        expression = "(int) (Double.doubleToLongBits(this." + fieldName + ") ^ (Double.doubleToLongBits(this." + fieldName + ") >>> 32))";
-                        break;
-                    case BOOLEAN:
-                        expression = "(this." + fieldName + " ? 1 : 0)";
-                        break;
-                    case LONG:
-                        expression = "(int) (this." + fieldName + " ^ (this." + fieldName + " >>> 32))";
-                        break;
-                    default:
-                        expression = "this." + fieldName;
+            if(!property.isIgnored()) {
+                final String fieldName = toSafeName(property.getName());
+                String expression = null;
+                if(isPrimitive(property.getType())) {
+                    switch(property.getType().getKind()) {
+                        case FLOAT:
+                            expression = "Float.floatToIntBits(this." + fieldName + ")";
+                            break;
+                        case DOUBLE:
+                            expression = "(int) (Double.doubleToLongBits(this." + fieldName + ") ^ (Double.doubleToLongBits(this." + fieldName + ") >>> 32))";
+                            break;
+                        case BOOLEAN:
+                            expression = "(this." + fieldName + " ? 1 : 0)";
+                            break;
+                        case LONG:
+                            expression = "(int) (this." + fieldName + " ^ (this." + fieldName + " >>> 32))";
+                            break;
+                        default:
+                            expression = "this." + fieldName;
+                    }
+                } else {
+                    expression = "(this." + fieldName + " != null ? this." + fieldName + ".hashCode() : 0)";
                 }
-            } else {
-                expression = "(this." + fieldName + " != null ? this." + fieldName + ".hashCode() : 0)";
+                writer.append(indent(shift)).append("result = 31 * result + ").append(expression).append(";\n");
             }
-            writer.append(indent(shift)).append("result = 31 * result + ").append(expression).append(";\n");
         }
 
         writer.append(indent(shift)).append("return result;\n");
         writer.append(indent(--shift)).append("}\n\n");
 
+        return shift;
+    }
+    
+    protected int generateToString(Writer writer, int shift, InterfaceDefinition definition, String className) throws IOException {
+        writer.append(indent(shift)).append("@Override\n")
+              .append(indent(shift)).append("public String toString() {\n")
+              .append(indent(++shift)).append("return \"").append(className).append("{\"\n");
+              
+        shift++;
+        boolean isFirst = true;
+        for (Property property : definition.getProperties()) {
+            if(!property.isIgnored()) {
+                final String safeName = toSafeName(property.getName());
+                writer.append(indent(shift)).append(" + \"");
+                if(!isFirst) writer.append(", ");
+                writer.append(safeName).append("=\" + ").append(safeName).append("\n");
+                if(isFirst) isFirst = false;
+            }
+        }
+        writer.append(indent(shift)).append(" + '}';\n");
+        shift--;
+        
+        writer.append(indent(--shift)).append("}\n\n");
+        
         return shift;
     }
 
@@ -413,11 +456,11 @@ public class InterfaceProcessor extends AbstractProcessor {
         }
     }
 
-    protected String resolveImplementationClassName(GenerateClass domain, InterfaceDefinition definition) {
+    protected String resolveImplementationClassName(GenerateClass annotation, InterfaceDefinition definition) {
         String interfaceName = definition.getInterfaceName();
-        String className = domain.className();
+        String className = annotation.className();
         if(className.isEmpty()) {
-            if(definition.getMethods().isEmpty()) {
+            if(definition.getMethods().isEmpty() && !definition.isHavingIgnoredProperty()) {
                 return getClassNamePrefix() + capitalize(interfaceName) + getClassNameSuffix();
             } else {
                 return getAbstractClassNamePrefix() + capitalize(interfaceName) + getAbstractClassNameSuffix();

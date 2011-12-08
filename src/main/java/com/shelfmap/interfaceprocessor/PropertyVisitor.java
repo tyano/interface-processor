@@ -159,11 +159,11 @@ public class PropertyVisitor extends ElementScanner6<Void, Environment> {
                         Map<? extends ExecutableElement, ? extends AnnotationValue> valueMap = elements.getElementValuesWithDefaults(annotation);
                         for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry : valueMap.entrySet()) {
                             ExecutableElement key = entry.getKey();
+                            AnnotationValue value = entry.getValue();
                             if(key.getSimpleName().toString().equals("retainType")) {
                                 //the return value of the method 'retainType' is an enum value RetainType.
                                 //but it is manageable as only a VariableElement, and we can get the name of the enum object from the VariableElement.
                                 //we can resolve the correct enum-value from the String value through the RetainType.valueOf(String) method.
-                                AnnotationValue value = entry.getValue();
                                 VariableElement type = (VariableElement) value.getValue();
                                 property.setRetainType(type.getSimpleName().toString());
                             } else if(key.getSimpleName().toString().equals("realType")) {
@@ -171,9 +171,11 @@ public class PropertyVisitor extends ElementScanner6<Void, Environment> {
                                 //but in annotation-processing time, all Class<?> is expressed as TypeMirror.
                                 //TypeMirror object contains all information about the Class<?> in source-code level,
                                 //so we can retrieve full-class-name from it when it is needed.
-                                AnnotationValue value = entry.getValue();
                                 TypeMirror type = (TypeMirror) value.getValue();
                                 property.setRealType(type);
+                            } else if(key.getSimpleName().toString().equals("ignore")) {
+                                Boolean ignore = (Boolean) value.getValue();
+                                property.setIgnored(ignore.booleanValue());
                             }
                         }
                     }
