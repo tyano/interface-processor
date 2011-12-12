@@ -536,7 +536,10 @@ public class InterfaceProcessor extends AbstractProcessor {
         assert property != null;
 
         String safeName = prefix + toSafeName(property.getName());
-        RetainType type = RetainType.valueOf(property.getRetainType());
+        RetainType type = RetainType.HOLD;
+        if(!isPrimitive(property.getType())) {
+            type = RetainType.valueOf(property.getRetainType());
+        }
         return type.codeFor(safeName, property);
     }
 
@@ -552,7 +555,7 @@ public class InterfaceProcessor extends AbstractProcessor {
                 return typeUtils.isSameType(type, typeUtils.boxedClass(typeUtils.getPrimitiveType(TypeKind.BOOLEAN)).asType());
         }
     }
-
+    
     protected final boolean isPrimitive(TypeMirror type) {
         switch(type.getKind()) {
             case BOOLEAN:
