@@ -31,7 +31,6 @@ import javax.tools.JavaFileObject;
 
 import static com.shelfmap.interfaceprocessor.util.Strings.capitalize;
 
-import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.util.*;
 import javax.lang.model.element.*;
@@ -81,16 +80,19 @@ public class InterfaceProcessor extends AbstractProcessor {
                     Filer filer = processingEnv.getFiler();
                     JavaFileObject javaFile = filer.createSourceFile(fullClassName, typeElement);
                     writer = javaFile.openWriter();
+                    
+                    AnnotationMirror annotation = findAnnotation(element, GenerateClass.class, elementUtils, typeUtils);
+                    generateClassDefinition(writer, packageName, definition, annotation, className, typeElement, elementUtils, typeUtils);
 
-                    generateClassDefinition(writer, packageName, definition, className, typeElement, elementUtils, typeUtils);
-
+                    boolean isHavingSuperClass = isHavingSuperClass(elementUtils, typeUtils, annotation);
+                    
                     int shift = 1;
                     shift = generateFields(writer, shift, definition, typeElement, elementUtils, typeUtils);
                     shift = generateConstructors(writer, shift, className, definition, typeElement, elementUtils, typeUtils);
                     shift = generatePropertyAccessors(writer, shift, definition, typeElement, elementUtils, typeUtils);
-                    shift = generateEquals(writer, shift, definition, className);
-                    shift = generateHashCode(writer, shift, definition, className);
-                    shift = generateToString(writer, shift, definition, className);
+                    shift = generateEquals(writer, shift, definition, className, isHavingSuperClass);
+                    shift = generateHashCode(writer, shift, definition, className, isHavingSuperClass);
+                    shift = generateToString(writer, shift, definition, className, isHavingSuperClass);
 
                     if(isPropertyChangeEventAware(typeElement, elementUtils, typeUtils)) {
                         shift = generatePropertyListenerAccessors(writer, shift, definition, typeElement, elementUtils, typeUtils);
@@ -108,6 +110,10 @@ public class InterfaceProcessor extends AbstractProcessor {
         }
         return processed;
     }
+    
+    private boolean isHavingSuperClass(Elements elementUtils, Types typeUtils, AnnotationMirror annotation) {
+        return !getSuperClassValue(elementUtils, typeUtils, elementUtils.getElementValuesWithDefaults(annotation)).isEmpty();
+    }
 
     private boolean isPropertyChangeEventAware(TypeElement element, Elements elementUtil, Types typeUtils) {
         TypeElement propertyAware = elementUtil.getTypeElement(PropertyChangeEventAware.class.getName());
@@ -123,15 +129,14 @@ public class InterfaceProcessor extends AbstractProcessor {
         return definition.getMethods().isEmpty() && !definition.isHavingIgnoredProperty();
     }
 
-    private void generateClassDefinition(Writer writer, String packageName, InterfaceDefinition definition, String className, Element element, Elements elementUtils, Types typeUtils) throws IOException {
+    private void generateClassDefinition(Writer writer, String packageName, InterfaceDefinition definition, AnnotationMirror annotation, String className, Element element, Elements elementUtils, Types typeUtils) throws IOException {
         String generationTime = String.format("%1$tFT%1$tH:%1$tM:%1$tS.%1$tL%1$tz", new Date()); //%1$tY%1$tm%1$td-%1$tH%1$tk%1$tS-%1$tN%1$tz
 
         writer.append("package ").append(packageName).append(";\n\n");
         writer.append("@javax.annotation.Generated(value = \"" + this.getClass().getName() + "\", date = \"" + generationTime + "\")\n");
         writer.append("public ").append(isAbstract(definition) ? "" : "abstract ").append("class ").append(className);
 
-        AnnotationMirror mirror = findAnnotation(element, GenerateClass.class, elementUtils, typeUtils);
-        String superClassName = getSuperClassValue(elementUtils, typeUtils, elementUtils.getElementValuesWithDefaults(mirror));
+        String superClassName = getSuperClassValue(elementUtils, typeUtils, elementUtils.getElementValuesWithDefaults(annotation));
         if(!superClassName.isEmpty()) {
             writer.append(" extends ").append(superClassName);
         }
@@ -300,7 +305,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         return shift;
     }
 
-    protected int generateEquals(Writer writer, int shift, InterfaceDefinition definition, String className) throws IOException {
+    protected int generateEquals(Writer writer, int shift, InterfaceDefinition definition, String className, boolean isHavingSuperClass) throws IOException {
 
         writer.append(indent(shift)).append("@Override\n")
               .append(indent(shift)).append("public boolean equals(Object obj) {\n")
@@ -339,13 +344,19 @@ public class InterfaceProcessor extends AbstractProcessor {
                 }
             }
         }
+        
+        if(isHavingSuperClass) {
+            writer.append(indent(shift)).append("if (!super.equals(obj)) {\n")
+                  .append(indent(++shift)).append("return false;\n")
+                  .append(indent(--shift)).append("}\n");
+        }
 
         writer.append(indent(shift)).append("return true;\n");
         writer.append(indent(--shift)).append("}\n\n");
         return shift;
     }
 
-    protected int generateHashCode(Writer writer, int shift, InterfaceDefinition definition, String className) throws IOException {
+    protected int generateHashCode(Writer writer, int shift, InterfaceDefinition definition, String className, boolean isHavingSuperClass) throws IOException {
         writer.append(indent(shift)).append("@Override\n")
               .append(indent(shift)).append("public int hashCode() {\n")
               .append(indent(++shift)).append("int result = 17;\n");
@@ -378,13 +389,17 @@ public class InterfaceProcessor extends AbstractProcessor {
             }
         }
 
+        if(isHavingSuperClass) {
+            writer.append(indent(shift)).append("result = 31 * result + ").append("super.hashCode();\n");
+        }
+
         writer.append(indent(shift)).append("return result;\n");
         writer.append(indent(--shift)).append("}\n\n");
 
         return shift;
     }
 
-    protected int generateToString(Writer writer, int shift, InterfaceDefinition definition, String className) throws IOException {
+    protected int generateToString(Writer writer, int shift, InterfaceDefinition definition, String className, boolean isHavinsSuperClass) throws IOException {
         writer.append(indent(shift)).append("@Override\n")
               .append(indent(shift)).append("public String toString() {\n")
               .append(indent(++shift)).append("return \"").append(className).append("{\"\n");
@@ -399,6 +414,12 @@ public class InterfaceProcessor extends AbstractProcessor {
                 writer.append(safeName).append("=\" + ").append(safeName).append("\n");
                 if(isFirst) isFirst = false;
             }
+        }
+        if(isHavinsSuperClass) {
+            writer.append(indent(shift)).append(" + \"");
+            if(!isFirst) writer.append(", ");
+            writer.append("superClass=\" + ").append("super.toString()\n");
+            
         }
         writer.append(indent(shift)).append(" + '}';\n");
         shift--;
