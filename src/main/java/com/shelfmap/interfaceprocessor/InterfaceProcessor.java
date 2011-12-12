@@ -181,6 +181,13 @@ public class InterfaceProcessor extends AbstractProcessor {
                     writer.append(indent(shift)).append("public void set").append(capitalize(property.getName())).append("(").append(propertyType).append(" ").append(fieldName).append(") {\n");
 
                     shift++;
+                    
+                    writer.append(indent(shift++)).append("if (this.").append(fieldName).append(" != ").append(fieldName);
+                    if(!isPrimitive(property.getType())) {
+                        writer.append(" && (").append("this.").append(fieldName).append(" != null && !this.").append(fieldName).append(".equals(").append(fieldName).append("))");
+                    }
+                    writer.append(") {\n");
+                    
                     if(propertySupport) {
                         writer.append(indent(shift)).append(propertyType).append(" oldValue = this.").append(fieldName).append(";\n");
                     }
@@ -191,6 +198,7 @@ public class InterfaceProcessor extends AbstractProcessor {
                         writer.append(indent(shift)).append("this.propertySupport.firePropertyChange(\"").append(property.getName()).append("\", oldValue, this.").append(fieldName).append(");\n");
                     }
 
+                    writer.append(indent(--shift)).append("}\n");
                     writer.append(indent(--shift)).append("}\n\n");
                 }
             }
