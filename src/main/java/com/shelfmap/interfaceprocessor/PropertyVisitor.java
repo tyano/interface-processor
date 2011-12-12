@@ -18,6 +18,7 @@ package com.shelfmap.interfaceprocessor;
 import com.shelfmap.interfaceprocessor.impl.DefaultProperty;
 import static com.shelfmap.interfaceprocessor.util.Strings.*;
 
+import com.sun.tools.internal.xjc.reader.TypeUtil;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -50,7 +51,9 @@ public class PropertyVisitor extends ElementScanner6<Void, Environment> {
         for (TypeMirror superType : element.getInterfaces()) {
             Element superInterface = env.getProcessingEnvironment().getTypeUtils().asElement(superType);
             env.setLevel(env.getLevel() + 1);
-            this.visit(superInterface, env);
+            if(!isPropertyEventAware(superType, env)) {
+                this.visit(superInterface, env);
+            }
             env.setLevel(env.getLevel() - 1);
         }
 
@@ -66,6 +69,15 @@ public class PropertyVisitor extends ElementScanner6<Void, Environment> {
             definition.addTypeParameters(element.getTypeParameters().toArray(new TypeParameterElement[0]));
         }
         return super.visitType(element, env);
+    }
+
+    private boolean isPropertyEventAware(TypeMirror type, Environment env) {
+        ProcessingEnvironment p = env.getProcessingEnvironment();
+        Types typeUtils = p.getTypeUtils();
+        Elements elementUtils = p.getElementUtils();
+
+        TypeMirror propertySupportType = elementUtils.getTypeElement(PropertyChangeEventAware.class.getName()).asType();
+        return typeUtils.isSubtype(type, propertySupportType);
     }
 
     private String[] splitPackageName(String value) {
