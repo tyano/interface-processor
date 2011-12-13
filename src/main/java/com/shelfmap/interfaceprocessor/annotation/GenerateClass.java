@@ -28,8 +28,9 @@ import java.lang.annotation.Target;
 @Target(ElementType.TYPE)
 public @interface GenerateClass {
     boolean autoGenerate() default true;
+    boolean threadSafe() default false;
     String packageName() default "";
-    boolean isPackageNameRelative() default false;
+    boolean packageNameRelative() default false;
     String className() default "";
     Class<?> superClass() default Void.class;
 }
