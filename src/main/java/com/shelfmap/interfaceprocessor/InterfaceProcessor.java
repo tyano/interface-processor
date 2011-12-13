@@ -36,7 +36,6 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import javax.lang.model.element.*;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
@@ -167,17 +166,34 @@ public class InterfaceProcessor extends AbstractProcessor {
     protected String toAtomicGet(Property property, String prefix) {
         switch(property.getType().getKind()) {
         case SHORT:
-            return "(short)" + toVariableName(property, prefix)  + ".get()";
+            return toAtomicGetValue(property, toVariableName(property, prefix)  + ".get()");
         case CHAR:
-            return "(char)" + toVariableName(property, prefix) + ".get()";
+            return toAtomicGetValue(property, toVariableName(property, prefix) + ".get()");
         case BYTE:
-            return "(byte)" + toVariableName(property, prefix) + ".get()";
+            return toAtomicGetValue(property, toVariableName(property, prefix) + ".get()");
         case FLOAT:
-            return "Float.intBitsToFloat(" + toVariableName(property, prefix) + ".get()" + ")";
+            return toAtomicGetValue(property, toVariableName(property, prefix) + ".get()");
         case DOUBLE:
-            return "Double.longBitsToDouble(" + toVariableName(property, prefix) + ".get()" + ")";
+            return toAtomicGetValue(property, toVariableName(property, prefix) + ".get()");
         default:
-            return toVariableName(property, prefix) + ".get()";
+            return toAtomicGetValue(property, toVariableName(property, prefix) + ".get()");
+        }
+    }
+    
+    protected String toAtomicGetValue(Property property, String value) {
+        switch(property.getType().getKind()) {
+        case SHORT:
+            return "(short)" + value;
+        case CHAR:
+            return "(char)" + value;
+        case BYTE:
+            return "(byte)" + value;
+        case FLOAT:
+            return "Float.intBitsToFloat(" + value + ")";
+        case DOUBLE:
+            return "Double.longBitsToDouble(" + value + ")";
+        default:
+            return value;
         }
     }
 
@@ -326,11 +342,12 @@ public class InterfaceProcessor extends AbstractProcessor {
             if(!property.isIgnored()) {
                 String fieldName = toSafeName(property.getName());
                 String propertyType = property.getType().toString();
-
+                
                 if(property.isReadable()) {
+                    RetainType type = RetainType.valueOf(property.getRetainType());
                     writer.append(indent(shift)).append("@Override\n");
                     writer.append(indent(shift)).append("public ").append(propertyType).append(isBoolean(property.getType(), typeUtils) ? " is" : " get").append(capitalize(property.getName())).append("() {\n");
-                    writer.append(indent(++shift)).append("return ").append(toAtomicGet(property, "this.")).append(";\n");
+                    writer.append(indent(++shift)).append("return ").append(type.codeFor(toAtomicGet(property, "this."), property)).append(";\n");
                     writer.append(indent(--shift)).append("}\n\n");
                 }
 
@@ -341,7 +358,22 @@ public class InterfaceProcessor extends AbstractProcessor {
 
                     shift++;
                     
-                    writer.append(indent(shift)).append(propertyType).append(" oldValue = ").append(toVariableName(property, "this.")).append(".getAndSet(").append(toAtomicAssignableValue(property)).append(");\n");
+                    writer.append(indent(shift));
+                    String valueType = propertyType;
+                    switch(property.getType().getKind()) {
+                        case SHORT:
+                        case CHAR:
+                        case BYTE:
+                        case FLOAT:
+                            valueType = "int";
+                            break;
+                        case DOUBLE:
+                            valueType = "long";
+                            break;
+                    }
+                    
+                    writer.append(valueType).append(" currentValue = ").append(toAtomicAssignableValue(property)).append(";\n");
+                    writer.append(indent(shift)).append(valueType).append(" oldValue = ").append(toVariableName(property, "this.")).append(".getAndSet(currentValue);\n");
 
                     if(propertySupport) {
                         writer.append(indent(shift)).append("if (oldValue != ").append(fieldName);
@@ -350,7 +382,7 @@ public class InterfaceProcessor extends AbstractProcessor {
                         }
                         writer.append(") {\n");
                         
-                        writer.append(indent(++shift)).append("this.propertySupport.firePropertyChange(\"").append(property.getName()).append("\", oldValue, this.").append(fieldName).append(");\n");
+                        writer.append(indent(++shift)).append("this.propertySupport.firePropertyChange(\"").append(property.getName()).append("\", " + toAtomicGetValue(property, "oldValue") + ", " + toAtomicGetValue(property, "currentValue") + ");\n");
                         writer.append(indent(--shift)).append("}\n");
                     }
                     
@@ -876,7 +908,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         RetainType type = RetainType.valueOf(property.getRetainType());
         return type.codeFor(safeName, property);
     }
-
+    
     protected String toSafeName(String word) {
         return Objects.isPreserved(word) ? "_" + word : word;
     }
