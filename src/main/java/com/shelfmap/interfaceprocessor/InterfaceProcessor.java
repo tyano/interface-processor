@@ -309,13 +309,17 @@ public class InterfaceProcessor extends AbstractProcessor {
                           .append("private final java.util.concurrent.locks.ReentrantReadWriteLock ")
                           .append(rwLockName).append(" = new java.util.concurrent.locks.ReentrantReadWriteLock();\n");
                     
-                    writer.append(indent(shift))
-                          .append("private final java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock ")
-                          .append(readLockName).append(" = ").append(rwLockName).append(".readLock();\n");
-
-                    writer.append(indent(shift))
-                          .append("private final java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock ")
-                          .append(writerLockName).append(" = ").append(rwLockName).append(".writeLock();\n");
+                    if(property.isReadable()) {
+                        writer.append(indent(shift))
+                            .append("private final java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock ")
+                            .append(readLockName).append(" = ").append(rwLockName).append(".readLock();\n");
+                    }
+                    
+                    if(property.isWritable()) {
+                        writer.append(indent(shift))
+                            .append("private final java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock ")
+                            .append(writerLockName).append(" = ").append(rwLockName).append(".writeLock();\n");
+                    }
                 }
             }
         }
