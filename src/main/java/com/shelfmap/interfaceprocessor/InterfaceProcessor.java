@@ -106,6 +106,9 @@ public class InterfaceProcessor extends AbstractProcessor {
                         shift = generateToString(writer, shift, definition, className, isHavingSuperClass);
                     }
                     
+                    if(isCloneable(elementUtils, typeUtils, annotation)) {
+                        shift = generateClone(writer, shift, definition, className);
+                    }
 
                     if(isPropertyChangeEventAware(typeElement, elementUtils, typeUtils)) {
                         shift = generatePropertyListenerAccessors(writer, shift, definition, typeElement, elementUtils, typeUtils);
@@ -197,6 +200,18 @@ public class InterfaceProcessor extends AbstractProcessor {
             return value;
         }
     }
+    
+    private boolean isCloneable(Elements elementUtils, Types typeUtils, AnnotationMirror annotation) {
+        Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
+        AnnotationValue cloneableValue = getValueOfAnnotation(annotationValueMap, "cloneable");
+        return ((Boolean)cloneableValue.getValue()).booleanValue();
+    }
+    
+    private boolean isSerializable(Elements elementUtils, Types typeUtils, AnnotationMirror annotation) {
+        Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
+        AnnotationValue serializableValue = getValueOfAnnotation(annotationValueMap, "serializable");
+        return ((Boolean)serializableValue.getValue()).booleanValue();
+    }
 
     private boolean isHavingSuperClass(Elements elementUtils, Types typeUtils, AnnotationMirror annotation) {
         return !getSuperClassValue(elementUtils, typeUtils, elementUtils.getElementValuesWithDefaults(annotation)).isEmpty();
@@ -231,10 +246,7 @@ public class InterfaceProcessor extends AbstractProcessor {
 
         writer.append(" implements ").append(definition.getPackage() + "." + definition.getInterfaceName());
         
-        elementUtils.getElementValuesWithDefaults(annotation);
-        
-        AnnotationValue serializableValue = getValueOfAnnotation(annotationValueMap, "serializable");
-        boolean isSerializable = ((Boolean)serializableValue.getValue()).booleanValue();
+        boolean isSerializable = isSerializable(elementUtils, typeUtils, annotation);
         if(isSerializable) {
             writer.append(", java.io.Serializable");
         }
@@ -952,13 +964,24 @@ public class InterfaceProcessor extends AbstractProcessor {
         }
         writer.append(indent(shift)).append("sb.append(\"}\");\n");
         writer.append(indent(shift)).append("return sb.toString();\n");
-        shift--;
 
         writer.append(indent(--shift)).append("}\n\n");
 
         return shift;
     }    
 
+    protected int generateClone(Writer writer, int shift, InterfaceDefinition definition, String className) throws IOException {
+        writer.append(indent(shift)).append("@Override\n")
+              .append(indent(shift)).append("public ").append(className).append(" clone() {\n")
+              .append(indent(++shift)).append("try {\n")
+              .append(indent(++shift)).append("return (").append(className).append(") super.clone();\n")
+              .append(indent(--shift)).append("} catch(CloneNotSupportedException ex) {\n")
+              .append(indent(++shift)).append("throw new IllegalStateException(ex);\n")
+              .append(indent(--shift)).append("}\n")
+              .append(indent(--shift)).append("}\n\n");
+        return shift;
+    }
+    
     protected int generatePropertyListenerAccessors(Writer writer, int shift, InterfaceDefinition definition, TypeElement element, Elements elementUtils, Types typeUtils) throws IOException {
         writer.append(indent(shift)).append("@Override\n")
               .append(indent(shift++)).append("public void addPropertyChangeListener(java.beans.PropertyChangeListener... listeners) {\n")
