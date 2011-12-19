@@ -33,4 +33,7 @@ public @interface GenerateClass {
     boolean packageNameRelative() default false;
     String className() default "";
     Class<?> superClass() default Void.class;
+    boolean serializable() default false;
+    long serialVersion() default 1L;
+    boolean cloneable() default false;
 }

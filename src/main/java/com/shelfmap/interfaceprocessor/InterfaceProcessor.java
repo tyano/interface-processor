@@ -222,14 +222,29 @@ public class InterfaceProcessor extends AbstractProcessor {
         writer.append("package ").append(packageName).append(";\n\n");
         writer.append("@javax.annotation.Generated(value = \"" + this.getClass().getName() + "\", date = \"" + generationTime + "\")\n");
         writer.append("public ").append(isAbstract(definition) ? "" : "abstract ").append("class ").append(className);
-
-        String superClassName = getSuperClassValue(elementUtils, typeUtils, elementUtils.getElementValuesWithDefaults(annotation));
+        
+        Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
+        String superClassName = getSuperClassValue(elementUtils, typeUtils, annotationValueMap);
         if(!superClassName.isEmpty()) {
             writer.append(" extends ").append(superClassName);
         }
 
-        writer.append(" implements ").append(definition.getPackage() + "." + definition.getInterfaceName())
-              .append(" {\n");
+        writer.append(" implements ").append(definition.getPackage() + "." + definition.getInterfaceName());
+        
+        elementUtils.getElementValuesWithDefaults(annotation);
+        
+        AnnotationValue serializableValue = getValueOfAnnotation(annotationValueMap, "serializable");
+        boolean isSerializable = ((Boolean)serializableValue.getValue()).booleanValue();
+        if(isSerializable) {
+            writer.append(", java.io.Serializable");
+        }
+        writer.append(" {\n");
+        
+        if(isSerializable) {
+            AnnotationValue serialVersionValue = getValueOfAnnotation(annotationValueMap, "serialVersion");
+            Long version = (Long)serialVersionValue.getValue();
+            writer.append(indent(1)).append("private static final long serialVersionUID = ").append(version.toString()).append("L;\n");
+        }
     }
 
     protected int generateFields(Writer writer, int shift, InterfaceDefinition definition, TypeElement element, Elements elementUtils, Types typeUtils) throws IOException {
