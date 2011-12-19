@@ -384,23 +384,24 @@ public class InterfaceProcessor extends AbstractProcessor {
 
                     shift++;
                     
-                    writer.append(indent(shift++)).append("if (this.").append(fieldName).append(" != ").append(fieldName);
-                    if(!isPrimitive(property.getType())) {
-                        writer.append(" && (").append("this.").append(fieldName).append(" != null && !this.").append(fieldName).append(".equals(").append(fieldName).append("))");
-                    }
-                    writer.append(") {\n");
-                    
                     if(propertySupport) {
                         writer.append(indent(shift)).append(propertyType).append(" oldValue = this.").append(fieldName).append(";\n");
                     }
 
                     writer.append(indent(shift)).append("this.").append(fieldName).append(" = ").append(retain(property)).append(";\n");
 
-                    if(isPropertyChangeEventAware(element, elementUtils, typeUtils)) {
+                    if(propertySupport) {
+                        writer.append(indent(shift++)).append("if (this.").append(fieldName).append(" != ").append(fieldName);
+                        if(!isPrimitive(property.getType())) {
+                            writer.append(" && (").append("this.").append(fieldName).append(" != null && !this.").append(fieldName).append(".equals(").append(fieldName).append("))");
+                        }
+                        writer.append(") {\n");
+
                         writer.append(indent(shift)).append("this.propertySupport.firePropertyChange(\"").append(property.getName()).append("\", oldValue, this.").append(fieldName).append(");\n");
+    
+                        writer.append(indent(--shift)).append("}\n");
                     }
 
-                    writer.append(indent(--shift)).append("}\n");
                     writer.append(indent(--shift)).append("}\n\n");
                 }
             }
@@ -439,8 +440,11 @@ public class InterfaceProcessor extends AbstractProcessor {
                 if(property.isWritable()) {
                     boolean propertySupport = isPropertyChangeEventAware(element, elementUtils, typeUtils);
                     writer.append(indent(shift)).append("@Override\n")
-                          .append(indent(shift)).append("public void set").append(capitalize(property.getName())).append("(").append(propertyTypeStr).append(" ").append(fieldName).append(") {\n")
-                          .append(indent(++shift)).append("boolean isPropertyChanged = false;\n");
+                          .append(indent(shift++)).append("public void set").append(capitalize(property.getName())).append("(").append(propertyTypeStr).append(" ").append(fieldName).append(") {\n");
+                    
+                    if(propertySupport) {
+                        writer.append(indent(shift)).append("boolean isPropertyChanged = false;\n");
+                    }
 
                     String valueType = propertyTypeStr;
                     
@@ -458,29 +462,42 @@ public class InterfaceProcessor extends AbstractProcessor {
                         }
 
                         writer.append(indent(shift)).append(valueType).append(" newValue = ").append(toAtomicAssignableValue(property)).append(";\n");
-                        writer.append(indent(shift)).append(valueType).append(" oldValue = ").append(toVariableName(property, "this.")).append(".getAndSet(newValue);\n");
+                        
+                        if(propertySupport) {
+                            writer.append(indent(shift)).append(valueType).append(" oldValue = ").append(toVariableName(property, "this.")).append(".getAndSet(newValue);\n");
+                        } else {
+                            writer.append(indent(shift)).append(toVariableName(property, "this.")).append(".set(newValue);\n");
+                        }
                     } else {
                         final String writeLockName = fieldName + "WriteLock";
-                        writer.append(indent(shift)).append(propertyTypeStr).append(" newValue = null;\n")
-                              .append(indent(shift)).append(propertyTypeStr).append(" oldValue = null;\n")
-                              .append(indent(shift)).append(writeLockName).append(".lock();\n");
+                        writer.append(indent(shift)).append(propertyTypeStr).append(" newValue = null;\n");
+                        
+                        if(propertySupport) {
+                            writer.append(indent(shift)).append(propertyTypeStr).append(" oldValue = null;\n");
+                        }
+                        writer.append(indent(shift)).append(writeLockName).append(".lock();\n");
                               
                         writer.append(indent(shift)).append("try {\n")
-                              .append(indent(++shift)).append("newValue = ").append(retain(property)).append(";\n")
-                              .append(indent(shift)).append("oldValue = this.").append(fieldName).append(";\n")
-                              .append(indent(shift)).append("this.").append(fieldName).append(" = newValue;\n");
+                              .append(indent(++shift)).append("newValue = ").append(retain(property)).append(";\n");
                         
-                        writer.append(indent(shift)).append("isPropertyChanged = (oldValue != newValue");
-                        if(!isPrimitive(propertyType)) {
-                            writer.append(" && (").append("oldValue != null && !oldValue.equals(newValue))");
+                        if(propertySupport) {
+                            writer.append(indent(shift)).append("oldValue = this.").append(fieldName).append(";\n");
                         }
-                        writer.append(");\n");
+                        
+                        writer.append(indent(shift)).append("this.").append(fieldName).append(" = newValue;\n");
+                        
+                        if(propertySupport) {
+                            writer.append(indent(shift)).append("isPropertyChanged = (oldValue != newValue");
+                            if(!isPrimitive(propertyType)) {
+                                writer.append(" && (").append("oldValue != null && !oldValue.equals(newValue))");
+                            }
+                            writer.append(");\n");
+                        }
                         
                         writer.append(indent(--shift)).append("} finally {\n")
                               .append(indent(++shift)).append(writeLockName).append(".unlock();\n")
                               .append(indent(--shift)).append("}\n");
                     }
-                    
                     
                     //generate code for firing PropertyChangeEvent
                     if(propertySupport) {
