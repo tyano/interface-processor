@@ -96,15 +96,16 @@ public class InterfaceProcessor extends AbstractProcessor {
                         shift = generateAtomicPropertyAccessors(writer, shift, definition, typeElement, elementUtils, typeUtils);
                         shift = generateAtomicHashCode(writer, shift, definition, className, isHavingSuperClass);
                         shift = generateAtomicEquals(writer, shift, definition, className, isHavingSuperClass);
+                        shift = generateAtomicToString(writer, shift, definition, className, isHavingSuperClass);
                     } else {
                         shift = generateFields(writer, shift, definition, typeElement, elementUtils, typeUtils);
                         shift = generateConstructors(writer, shift, className, definition, typeElement, elementUtils, typeUtils);
                         shift = generatePropertyAccessors(writer, shift, definition, typeElement, elementUtils, typeUtils);
                         shift = generateHashCode(writer, shift, definition, className, isHavingSuperClass);
                         shift = generateEquals(writer, shift, definition, className, isHavingSuperClass);
+                        shift = generateToString(writer, shift, definition, className, isHavingSuperClass);
                     }
                     
-                    shift = generateToString(writer, shift, definition, className, isHavingSuperClass);
 
                     if(isPropertyChangeEventAware(typeElement, elementUtils, typeUtils)) {
                         shift = generatePropertyListenerAccessors(writer, shift, definition, typeElement, elementUtils, typeUtils);
@@ -898,6 +899,50 @@ public class InterfaceProcessor extends AbstractProcessor {
 
         return shift;
     }
+    
+    protected int generateAtomicToString(Writer writer, int shift, InterfaceDefinition definition, String className, boolean isHavinsSuperClass) throws IOException {
+        writer.append(indent(shift)).append("@Override\n")
+              .append(indent(shift)).append("public String toString() {\n")
+              .append(indent(++shift)).append("StringBuilder sb = new StringBuilder();\n")
+              .append(indent(shift)).append("sb.append(\"").append(className).append("{\");\n");
+
+        boolean isFirst = true;
+        for (Property property : definition.getProperties()) {
+            if(!property.isIgnored()) {
+                final String fieldName = toSafeName(property.getName());
+                final String readLockName = fieldName + "ReadLock";
+                
+                if(!isPrimitive(property.getType())) {
+                    writer.append(indent(shift)).append(readLockName).append(".lock();\n")
+                          .append(indent(shift++)).append("try {\n");
+                }
+                
+                writer.append(indent(shift)).append("sb.append(\"");
+                if(!isFirst) writer.append(", ");
+                writer.append(fieldName).append("=\").append(").append(fieldName).append(");\n");
+                if(isFirst) isFirst = false;
+                
+                if(!isPrimitive(property.getType())) {
+                    writer.append(indent(--shift)).append("} finally {\n")
+                          .append(indent(++shift)).append(readLockName).append(".unlock();\n")
+                          .append(indent(--shift)).append("}\n");
+                }
+            }
+        }
+        if(isHavinsSuperClass) {
+            writer.append(indent(shift)).append("sb.append(\"");
+            if(!isFirst) writer.append(", ");
+            writer.append("superClass=\").append(super.toString());\n");
+            if(isFirst) isFirst = false;
+        }
+        writer.append(indent(shift)).append("sb.append(\"}\");\n");
+        writer.append(indent(shift)).append("return sb.toString();\n");
+        shift--;
+
+        writer.append(indent(--shift)).append("}\n\n");
+
+        return shift;
+    }    
 
     protected int generatePropertyListenerAccessors(Writer writer, int shift, InterfaceDefinition definition, TypeElement element, Elements elementUtils, Types typeUtils) throws IOException {
         writer.append(indent(shift)).append("@Override\n")
