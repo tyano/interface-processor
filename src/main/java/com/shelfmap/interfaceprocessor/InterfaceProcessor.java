@@ -88,17 +88,17 @@ public class InterfaceProcessor extends AbstractProcessor {
                     generateClassDefinition(writer, packageName, definition, annotation, className, typeElement, elementUtils, typeUtils);
 
                     boolean isHavingSuperClass = isHavingSuperClass(elementUtils, typeUtils, annotation);
-                    
+                    FieldModifier modifier = generateAnnotation.fieldModifier();
                     int shift = 1;
                     if(generateAnnotation.threadSafe()) {
-                        shift = generateAtomicFields(writer, shift, definition, typeElement, elementUtils, typeUtils);
+                        shift = generateAtomicFields(writer, shift, definition, typeElement, modifier, elementUtils, typeUtils);
                         shift = generateAtomicConstructors(writer, shift, className, definition, typeElement, elementUtils, typeUtils);
                         shift = generateAtomicPropertyAccessors(writer, shift, definition, typeElement, elementUtils, typeUtils);
                         shift = generateAtomicHashCode(writer, shift, definition, className, isHavingSuperClass);
                         shift = generateAtomicEquals(writer, shift, definition, className, isHavingSuperClass);
                         shift = generateAtomicToString(writer, shift, definition, className, isHavingSuperClass);
                     } else {
-                        shift = generateFields(writer, shift, definition, typeElement, elementUtils, typeUtils);
+                        shift = generateFields(writer, shift, definition, typeElement, modifier, elementUtils, typeUtils);
                         shift = generateConstructors(writer, shift, className, definition, typeElement, elementUtils, typeUtils);
                         shift = generatePropertyAccessors(writer, shift, definition, typeElement, elementUtils, typeUtils);
                         shift = generateHashCode(writer, shift, definition, className, isHavingSuperClass);
@@ -259,11 +259,11 @@ public class InterfaceProcessor extends AbstractProcessor {
         }
     }
 
-    protected int generateFields(Writer writer, int shift, InterfaceDefinition definition, TypeElement element, Elements elementUtils, Types typeUtils) throws IOException {
+    protected int generateFields(Writer writer, int shift, InterfaceDefinition definition, TypeElement element, FieldModifier modifier, Elements elementUtils, Types typeUtils) throws IOException {
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
                 String typeName = property.getType().toString();
-                writer.append(indent(shift)).append("private ").append(typeName).append(" ").append(toSafeName(property.getName())).append(";\n");
+                writer.append(indent(shift)).append(modifier.getModifier()).append(" ").append(typeName).append(" ").append(toSafeName(property.getName())).append(";\n");
             }
         }
 
@@ -279,7 +279,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         return RetainType.valueOf(property.getRetainType());
     }
     
-    protected int generateAtomicFields(Writer writer, int shift, InterfaceDefinition definition, TypeElement element, Elements elementUtils, Types typeUtils) throws IOException {
+    protected int generateAtomicFields(Writer writer, int shift, InterfaceDefinition definition, TypeElement element, FieldModifier modifier, Elements elementUtils, Types typeUtils) throws IOException {
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
                 TypeMirror propertyType = property.getType();
@@ -290,7 +290,9 @@ public class InterfaceProcessor extends AbstractProcessor {
                 
                 final String fieldName = toSafeName(property.getName());
                 
-                writer.append(indent(shift)).append("private ");
+                String modifierStr = modifier.getModifier() + (modifier == FieldModifier.DEFAULT ? "" : " ");
+                
+                writer.append(indent(shift)).append(modifierStr);
                 writer.append(typeName)
                       .append(" ").append(fieldName);
 
@@ -306,20 +308,22 @@ public class InterfaceProcessor extends AbstractProcessor {
                     final String readLockName = fieldName + "ReadLock";
                     final String writerLockName = fieldName + "WriteLock";
                     writer.append(indent(shift))
-                          .append("private final java.util.concurrent.locks.ReentrantReadWriteLock ")
+                          .append(modifierStr).append("final java.util.concurrent.locks.ReentrantReadWriteLock ")
                           .append(rwLockName).append(" = new java.util.concurrent.locks.ReentrantReadWriteLock();\n");
                     
                     if(property.isReadable()) {
                         writer.append(indent(shift))
-                            .append("private final java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock ")
+                            .append(modifierStr).append("final java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock ")
                             .append(readLockName).append(" = ").append(rwLockName).append(".readLock();\n");
                     }
                     
                     if(property.isWritable()) {
                         writer.append(indent(shift))
-                            .append("private final java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock ")
+                            .append(modifierStr).append("final java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock ")
                             .append(writerLockName).append(" = ").append(rwLockName).append(".writeLock();\n");
                     }
+                    
+                    writer.append("\n");
                 }
             }
         }

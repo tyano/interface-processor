@@ -15,6 +15,7 @@
  */
 package com.shelfmap.interfaceprocessor.annotation;
 
+import com.shelfmap.interfaceprocessor.FieldModifier;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -36,4 +37,5 @@ public @interface GenerateClass {
     boolean serializable() default false;
     long serialVersion() default 1L;
     boolean cloneable() default false;
+    FieldModifier fieldModifier() default FieldModifier.PRIVATE;
 }
