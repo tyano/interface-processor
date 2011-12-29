@@ -33,9 +33,6 @@ import static com.shelfmap.interfaceprocessor.util.Strings.capitalize;
 
 import java.beans.PropertyChangeSupport;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import javax.lang.model.element.*;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
@@ -92,21 +89,12 @@ public class InterfaceProcessor extends AbstractProcessor {
                     boolean isHavingSuperClass = isHavingSuperClass(elementUtils, typeUtils, annotation);
                     FieldModifier modifier = generateAnnotation.fieldModifier();
                     int shift = 1;
-                    if(generateAnnotation.threadSafe()) {
-                        shift = generateAtomicFields(writer, shift, definition, typeElement, modifier, elementUtils, typeUtils);
-                        shift = generateAtomicConstructors(writer, shift, className, definition, typeElement, elementUtils, typeUtils);
-                        shift = generateAtomicPropertyAccessors(writer, shift, definition, typeElement, elementUtils, typeUtils);
-                        shift = generateAtomicHashCode(writer, shift, definition, className, isHavingSuperClass);
-                        shift = generateAtomicEquals(writer, shift, definition, className, isHavingSuperClass);
-                        shift = generateAtomicToString(writer, shift, definition, className, isHavingSuperClass);
-                    } else {
-                        shift = generateFields(writer, shift, definition, typeElement, modifier, elementUtils, typeUtils);
-                        shift = generateConstructors(writer, shift, className, definition, typeElement, elementUtils, typeUtils);
-                        shift = generatePropertyAccessors(writer, shift, definition, typeElement, elementUtils, typeUtils);
-                        shift = generateHashCode(writer, shift, definition, className, isHavingSuperClass);
-                        shift = generateEquals(writer, shift, definition, className, isHavingSuperClass);
-                        shift = generateToString(writer, shift, definition, className, isHavingSuperClass);
-                    }
+                    shift = generateFields(writer, shift, annotation, definition, typeElement, modifier, elementUtils, typeUtils);
+                    shift = generateConstructors(writer, shift, annotation, className, definition, typeElement, elementUtils, typeUtils);
+                    shift = generatePropertyAccessors(writer, shift, annotation, definition, typeElement, elementUtils, typeUtils);
+                    shift = generateHashCode(writer, shift, annotation, definition, className, isHavingSuperClass, typeElement, elementUtils, typeUtils);
+                    shift = generateEquals(writer, shift, annotation, definition, className, isHavingSuperClass, typeElement, elementUtils, typeUtils);
+                    shift = generateToString(writer, shift, annotation, definition, className, isHavingSuperClass, typeElement, elementUtils, typeUtils);
                     
                     if(isCloneable(elementUtils, typeUtils, annotation)) {
                         shift = generateClone(writer, shift, definition, className);
@@ -129,97 +117,29 @@ public class InterfaceProcessor extends AbstractProcessor {
         return processed;
     }
 
-    protected String toAtomicAssignableValue(Property property) {
-        return toAtomicAssignableValue(property, "");
-    }
-
-    protected String toAtomicAssignableValue(Property property, String prefix) {
-        switch(property.getType().getKind()) {
-        case SHORT:
-        case CHAR:
-        case BYTE:
-            return "(int)" + toVariableName(property, prefix);
-        case FLOAT:
-            return "Float.floatToIntBits(" + toVariableName(property, prefix) + ")";
-        case DOUBLE:
-            return "Double.doubleToLongBits(" + toVariableName(property, prefix) + ")";
-        default:
-            return retain(property);
-        }
-    }
-
-    protected String fieldToAtomicAssignableValue(Property property, String prefix) {
-        switch(property.getType().getKind()) {
-        case SHORT:
-        case CHAR:
-        case BYTE:
-            return "(int)" + toAtomicGet(property, prefix);
-        case FLOAT:
-            return "Float.floatToIntBits(" + toAtomicGet(property, prefix) + ")";
-        case DOUBLE:
-            return "Double.doubleToLongBits(" + toAtomicGet(property, prefix) + ")";
-        default:
-            return retain(property);
-        }
+    protected final boolean isThreadSafe(Elements elementUtils, Types typeUtils, AnnotationMirror annotation) {
+        Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
+        AnnotationValue threadSafeValue = getValueOfAnnotation(annotationValueMap, "threadSafe");
+        return ((Boolean)threadSafeValue.getValue()).booleanValue();
     }
     
-    private String toVariableName(Property property, String prefix) {
-        return prefix.isEmpty() 
-                ? toSafeName(property.getName()) 
-                : prefix + toSafeName(property.getName());
-    }
-    
-    protected String toAtomicGet(Property property, String prefix) {
-        switch(property.getType().getKind()) {
-        case SHORT:
-            return toAtomicGetValue(property, toVariableName(property, prefix)  + ".get()");
-        case CHAR:
-            return toAtomicGetValue(property, toVariableName(property, prefix) + ".get()");
-        case BYTE:
-            return toAtomicGetValue(property, toVariableName(property, prefix) + ".get()");
-        case FLOAT:
-            return toAtomicGetValue(property, toVariableName(property, prefix) + ".get()");
-        case DOUBLE:
-            return toAtomicGetValue(property, toVariableName(property, prefix) + ".get()");
-        default:
-            return toAtomicGetValue(property, toVariableName(property, prefix) + ".get()");
-        }
-    }
-    
-    protected String toAtomicGetValue(Property property, String value) {
-        switch(property.getType().getKind()) {
-        case SHORT:
-            return "(short)" + value;
-        case CHAR:
-            return "(char)" + value;
-        case BYTE:
-            return "(byte)" + value;
-        case FLOAT:
-            return "Float.intBitsToFloat(" + value + ")";
-        case DOUBLE:
-            return "Double.longBitsToDouble(" + value + ")";
-        default:
-            return value;
-        }
-    }
-    
-    private boolean isCloneable(Elements elementUtils, Types typeUtils, AnnotationMirror annotation) {
+    protected final boolean isCloneable(Elements elementUtils, Types typeUtils, AnnotationMirror annotation) {
         Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
         AnnotationValue cloneableValue = getValueOfAnnotation(annotationValueMap, "cloneable");
         return ((Boolean)cloneableValue.getValue()).booleanValue();
     }
     
-    private boolean isSerializable(Elements elementUtils, Types typeUtils, AnnotationMirror annotation) {
+    protected final boolean isSerializable(Elements elementUtils, Types typeUtils, AnnotationMirror annotation) {
         Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
         AnnotationValue serializableValue = getValueOfAnnotation(annotationValueMap, "serializable");
         return ((Boolean)serializableValue.getValue()).booleanValue();
     }
 
-    private boolean isHavingSuperClass(Elements elementUtils, Types typeUtils, AnnotationMirror annotation) {
+    protected final boolean isHavingSuperClass(Elements elementUtils, Types typeUtils, AnnotationMirror annotation) {
         return !getSuperClassValue(elementUtils, typeUtils, elementUtils.getElementValuesWithDefaults(annotation)).isEmpty();
     }
 
-    private boolean isPropertyChangeEventAware(TypeElement element, Elements elementUtil, Types typeUtils) {
+    protected final boolean isPropertyChangeEventAware(TypeElement element, Elements elementUtil, Types typeUtils) {
         TypeElement propertyAware = elementUtil.getTypeElement(PropertyChangeEventAware.class.getName());
         for (TypeMirror intrface : element.getInterfaces()) {
             if(typeUtils.isSubtype(intrface, propertyAware.asType())) {
@@ -229,11 +149,11 @@ public class InterfaceProcessor extends AbstractProcessor {
         return false;
     }
 
-    private boolean isAbstract(InterfaceDefinition definition) {
+    protected final boolean isAbstract(InterfaceDefinition definition) {
         return definition.getMethods().isEmpty() && !definition.isHavingIgnoredProperty();
     }
 
-    private void generateClassDefinition(Writer writer, String packageName, InterfaceDefinition definition, AnnotationMirror annotation, String className, Element element, Elements elementUtils, Types typeUtils) throws IOException {
+    protected void generateClassDefinition(Writer writer, String packageName, InterfaceDefinition definition, AnnotationMirror annotation, String className, Element element, Elements elementUtils, Types typeUtils) throws IOException {
         String generationTime = String.format("%1$tFT%1$tH:%1$tM:%1$tS.%1$tL%1$tz", new Date()); //%1$tY%1$tm%1$td-%1$tH%1$tk%1$tS-%1$tN%1$tz
 
         writer.append("package ").append(packageName).append(";\n\n");
@@ -261,16 +181,23 @@ public class InterfaceProcessor extends AbstractProcessor {
         }
     }
 
-    protected int generateFields(Writer writer, int shift, InterfaceDefinition definition, TypeElement element, FieldModifier modifier, Elements elementUtils, Types typeUtils) throws IOException {
+    protected int generateFields(Writer writer, int shift, AnnotationMirror annotation, InterfaceDefinition definition, TypeElement element, FieldModifier modifier, Elements elementUtils, Types typeUtils) throws IOException {
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
                 String typeName = property.getType().toString();
-                writer.append(indent(shift)).append(modifier.getModifier()).append(" ").append(typeName).append(" ").append(toSafeName(property.getName())).append(";\n");
+                writer.append(indent(shift)).append(modifier.getModifier()).append((modifier == FieldModifier.DEFAULT ? "" : " ")).append(typeName).append(" ").append(toSafeName(property.getName())).append(";\n");
             }
         }
 
         if(isPropertyChangeEventAware(element, elementUtils, typeUtils)) {
+            writer.append("\n");
             generatePropertySupportField(elementUtils, writer, shift);
+        }
+
+
+        if(isThreadSafe(elementUtils, typeUtils, annotation)) {
+            writer.append("\n");
+            writer.append(indent(shift)).append("protected final java.util.concurrent.locks.ReadWriteLock ").append(INSTANCE_LOCK).append(" = new java.util.concurrent.locks.ReentrantReadWriteLock();\n");
         }
 
         writer.append("\n");
@@ -281,283 +208,93 @@ public class InterfaceProcessor extends AbstractProcessor {
         return RetainType.valueOf(property.getRetainType());
     }
     
-    protected int generateAtomicFields(Writer writer, int shift, InterfaceDefinition definition, TypeElement element, FieldModifier modifier, Elements elementUtils, Types typeUtils) throws IOException {
-        for (Property property : definition.getProperties()) {
-            if(!property.isIgnored()) {
-                TypeMirror propertyType = property.getType();
-                 
-                final String typeName = isPrimitive(propertyType) 
-                        ? getAtomicTypeFor(property.getType(), elementUtils)
-                        : property.getType().toString();
-                
-                final String fieldName = toSafeName(property.getName());
-                
-                String modifierStr = modifier.getModifier() + (modifier == FieldModifier.DEFAULT ? "" : " ");
-                
-                writer.append(indent(shift)).append(modifierStr);
-                writer.append(typeName)
-                      .append(" ").append(fieldName);
-
-                if(isPrimitive(propertyType)) {
-                    writer.append(" = new ").append(typeName).append("()");
-                }
-                
-                writer.append(";\n");
-                
-                //generate fields for lock objects
-                if(!isPrimitive(propertyType)) {
-                    final String rwLockName = fieldName + "RWLock";
-                    final String readLockName = fieldName + "ReadLock";
-                    final String writerLockName = fieldName + "WriteLock";
-                    writer.append(indent(shift))
-                          .append(modifierStr).append("final java.util.concurrent.locks.ReadWriteLock ")
-                          .append(rwLockName).append(" = new java.util.concurrent.locks.ReentrantReadWriteLock();\n");
-                    
-                    if(property.isReadable()) {
-                        writer.append(indent(shift))
-                            .append(modifierStr).append("final java.util.concurrent.locks.Lock ")
-                            .append(readLockName).append(" = ").append(rwLockName).append(".readLock();\n");
-                    }
-                    
-                    if(property.isWritable()) {
-                        writer.append(indent(shift))
-                            .append(modifierStr).append("final java.util.concurrent.locks.Lock ")
-                            .append(writerLockName).append(" = ").append(rwLockName).append(".writeLock();\n");
-                    }
-                    
-                    writer.append("\n");
-                }
-            }
-        }
-        
-        if(isPropertyChangeEventAware(element, elementUtils, typeUtils)) {
-            generatePropertySupportField(elementUtils, writer, shift);
-        }
-        writer.append(indent(shift)).append("final java.util.concurrent.locks.Lock instanceLock = new java.util.concurrent.locks.ReentrantLock();\n");
-
-        writer.append("\n");
-        return shift;
-    }
-    
     protected void generatePropertySupportField(Elements elementUtils, Writer writer, int shift) throws IOException {
         TypeMirror supportClass = elementUtils.getTypeElement(PropertyChangeSupport.class.getName()).asType();
-        writer.append(indent(shift)).append("private ").append(supportClass.toString()).append(" propertySupport;\n");
+        writer.append(indent(shift)).append("protected final ").append(supportClass.toString()).append(" propertySupport;\n");
     }
     
-    protected final String getAtomicTypeFor(TypeMirror type, Elements elementUtils) {
-        switch(type.getKind()) {
-            case BOOLEAN:
-                return elementUtils.getTypeElement(AtomicBoolean.class.getName()).asType().toString();
-            case INT:
-            case SHORT:
-            case FLOAT:
-            case CHAR:
-            case BYTE:
-                return elementUtils.getTypeElement(AtomicInteger.class.getName()).asType().toString();
-            case LONG:
-            case DOUBLE:
-                return elementUtils.getTypeElement(AtomicLong.class.getName()).asType().toString();
-            case DECLARED:
-            default:
-            {
-                final String typeStr = type.toString();
-                final String atomicType = "java.util.concurrent.atomic.AtomicReference<" + typeStr + ">";
-                return atomicType;
-            }
-        }
-    }
-    
-    protected int generatePropertyAccessors(Writer writer, int shift, InterfaceDefinition definition, TypeElement element, Elements elementUtils, Types typeUtils) throws IOException {
+    protected int generatePropertyAccessors(Writer writer, int shift, AnnotationMirror annotation, InterfaceDefinition definition, TypeElement element, Elements elementUtils, Types typeUtils) throws IOException {
+        boolean threadSafe = isThreadSafe(elementUtils, typeUtils, annotation);
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
                 String fieldName = toSafeName(property.getName());
                 String propertyType = property.getType().toString();
 
                 if(property.isReadable()) {
-                    writer.append(indent(shift)).append("@Override\n");
-                    writer.append(indent(shift)).append("public ").append(propertyType).append(isBoolean(property.getType(), typeUtils) ? " is" : " get").append(capitalize(property.getName())).append("() {\n");
+                    writer.append(indent(shift)).append("@Override\n")
+                          .append(indent(shift)).append("public ").append(propertyType).append(isBoolean(property.getType(), typeUtils) ? " is" : " get").append(capitalize(property.getName())).append("() {\n");
+
+                    if(threadSafe) {
+                        writer.append(indent(++shift)).append(INSTANCE_LOCK).append(".readLock().lock();\n")
+                              .append(indent(shift)).append("try {\n");
+                    }
+
                     writer.append(indent(++shift)).append("return ").append(retain(property, "this.")).append(";\n");
-                    writer.append(indent(--shift)).append("}\n\n");
-                }
 
-                if(property.isWritable()) {
-                    boolean propertySupport = isPropertyChangeEventAware(element, elementUtils, typeUtils);
-                    writer.append(indent(shift)).append("@Override\n");
-                    writer.append(indent(shift)).append("public void set").append(capitalize(property.getName())).append("(").append(propertyType).append(" ").append(fieldName).append(") {\n");
-
-                    shift++;
-                    
-                    if(propertySupport) {
-                        writer.append(indent(shift)).append(propertyType).append(" oldValue = this.").append(fieldName).append(";\n");
-                    }
-
-                    writer.append(indent(shift)).append("this.").append(fieldName).append(" = ").append(retain(property)).append(";\n");
-
-                    if(propertySupport) {
-                        writer.append(indent(shift++)).append("if (this.").append(fieldName).append(" != ").append(fieldName);
-                        if(!isPrimitive(property.getType())) {
-                            writer.append(" && (").append("this.").append(fieldName).append(" != null && !this.").append(fieldName).append(".equals(").append(fieldName).append("))");
-                        }
-                        writer.append(") {\n");
-
-                        writer.append(indent(shift)).append("this.propertySupport.firePropertyChange(\"").append(property.getName()).append("\", oldValue, this.").append(fieldName).append(");\n");
-    
-                        writer.append(indent(--shift)).append("}\n");
-                    }
-
-                    writer.append(indent(--shift)).append("}\n\n");
-                }
-            }
-        }
-        return shift;
-    }
-    
-    protected int generateAtomicPropertyAccessors(Writer writer, int shift, InterfaceDefinition definition, TypeElement element, Elements elementUtils, Types typeUtils) throws IOException {
-        for (Property property : definition.getProperties()) {
-            if(!property.isIgnored()) {
-                String fieldName = toSafeName(property.getName());
-                TypeMirror propertyType = property.getType();
-                String propertyTypeStr = propertyType.toString();
-                
-                //generate code for getter.
-                if(property.isReadable()) {
-                    writer.append(indent(shift)).append("@Override\n");
-                    writer.append(indent(shift)).append("public ").append(propertyTypeStr).append(isBoolean(property.getType(), typeUtils) ? " is" : " get").append(capitalize(property.getName())).append("() {\n");
-                    
-                    if(isPrimitive(propertyType)) {
-                        writer.append(indent(++shift)).append(INSTANCE_LOCK).append(".lock();\n")
-                              .append(indent(shift)).append(INSTANCE_LOCK).append(".unlock();\n")
-                              .append(indent(shift)).append("return ").append(toAtomicGet(property, "this.")).append(";\n");
-                    } else {
-                        final String readLockName = fieldName + "ReadLock";
-                        writer.append(indent(++shift)).append(INSTANCE_LOCK).append(".lock();\n")
-                              .append(indent(shift)).append("try {\n")
-                              .append(indent(++shift)).append(readLockName).append(".lock();\n")
-                              .append(indent(--shift)).append("} finally {\n")
-                              .append(indent(++shift)).append(INSTANCE_LOCK).append(".unlock();\n")
-                              .append(indent(--shift)).append("}\n")
-                              .append(indent(shift)).append("try {\n")
-                              .append(indent(++shift)).append("return ").append(retain(property, "this.")).append(";\n")
-                              .append(indent(--shift)).append("} finally {\n")
-                              .append(indent(++shift)).append(readLockName).append(".unlock();\n")
+                    if(threadSafe) {
+                        writer.append(indent(--shift)).append("} finally {\n")
+                              .append(indent(++shift)).append(INSTANCE_LOCK).append(".readLock().unlock();\n")
                               .append(indent(--shift)).append("}\n");
                     }
-                    
+
                     writer.append(indent(--shift)).append("}\n\n");
                 }
 
-                //generate code for setter.
                 if(property.isWritable()) {
                     boolean propertySupport = isPropertyChangeEventAware(element, elementUtils, typeUtils);
-                    writer.append(indent(shift)).append("@Override\n")
-                          .append(indent(shift++)).append("public void set").append(capitalize(property.getName())).append("(").append(propertyTypeStr).append(" ").append(fieldName).append(") {\n");
-                    
+                    writer.append(indent(shift)).append("@Override\n");
+                    writer.append(indent(shift++)).append("public void set").append(capitalize(property.getName())).append("(").append(propertyType).append(" ").append(fieldName).append(") {\n");
+
+                    boolean isPrimitive = isPrimitive(property.getType());
+                    String valueType = property.getType().toString();
+
                     if(propertySupport) {
+                        writer.append(indent(shift)).append(valueType).append(" newValue").append(isPrimitive ? "" : " = null").append(";\n");
+                        writer.append(indent(shift)).append(valueType).append(" oldValue").append(isPrimitive ? "" : " = null").append(";\n");
                         writer.append(indent(shift)).append("boolean isPropertyChanged = false;\n");
                     }
 
-                    String valueType = propertyTypeStr;
-                    
-                    if(isPrimitive(propertyType)) {
-                        switch(property.getType().getKind()) {
-                            case SHORT:
-                            case CHAR:
-                            case BYTE:
-                            case FLOAT:
-                                valueType = "int";
-                                break;
-                            case DOUBLE:
-                                valueType = "long";
-                                break;
-                        }
-
-                        writer.append(indent(shift)).append(valueType).append(" newValue = ").append(toAtomicAssignableValue(property)).append(";\n");
-                        
-                        if(propertySupport) {
-                            writer.append(indent(shift)).append(valueType).append(" oldValue = ").append(toVariableName(property, "this.")).append(".getAndSet(newValue);\n");
-                        } else {
-                            writer.append(indent(shift)).append(toVariableName(property, "this.")).append(".set(newValue);\n");
-                        }
-                    } else {
-                        final String writeLockName = fieldName + "WriteLock";
-                        writer.append(indent(shift)).append(propertyTypeStr).append(" newValue = null;\n");
-                        
-                        if(propertySupport) {
-                            writer.append(indent(shift)).append(propertyTypeStr).append(" oldValue = null;\n");
-                        }
-                        writer.append(indent(shift)).append(INSTANCE_LOCK).append(".lock();\n")
-                              .append(indent(shift)).append("try {\n")
-                              .append(indent(++shift)).append(writeLockName).append(".lock();\n")
-                              .append(indent(--shift)).append("} finally {\n")
-                              .append(indent(++shift)).append(INSTANCE_LOCK).append(".unlock();\n")
-                              .append(indent(--shift)).append("}\n");
-                              
-                        writer.append(indent(shift)).append("try {\n")
-                              .append(indent(++shift)).append("newValue = ").append(retain(property)).append(";\n");
-                        
-                        if(propertySupport) {
-                            writer.append(indent(shift)).append("oldValue = this.").append(fieldName).append(";\n");
-                        }
-                        
-                        writer.append(indent(shift)).append("this.").append(fieldName).append(" = newValue;\n");
-                        
-                        if(propertySupport) {
-                            writer.append(indent(shift)).append("isPropertyChanged = (oldValue != newValue");
-                            if(!isPrimitive(propertyType)) {
-                                writer.append(" && (").append("oldValue != null && !oldValue.equals(newValue))");
-                            }
-                            writer.append(");\n");
-                        }
-                        
-                        writer.append(indent(--shift)).append("} finally {\n")
-                              .append(indent(++shift)).append(writeLockName).append(".unlock();\n")
-                              .append(indent(--shift)).append("}\n");
+                    if(threadSafe) {
+                        writer.append(indent(shift)).append(INSTANCE_LOCK).append(".writeLock().lock();\n")
+                              .append(indent(shift++)).append("try {\n");
                     }
-                    
+
+                    if(propertySupport) {
+                        writer.append(indent(shift)).append("newValue = ").append(retain(property)).append(";\n");
+                        writer.append(indent(shift)).append("oldValue = this.").append(fieldName).append(";\n");
+                        writer.append(indent(shift)).append("this.").append(fieldName).append(" = newValue;\n");
+                    } else {
+                        writer.append(indent(shift)).append("this.").append(fieldName).append(" = ").append(retain(property)).append(";\n");
+                    }
+
+                    if(propertySupport) {
+                        writer.append(indent(shift)).append("isPropertyChanged = (oldValue != newValue");
+                        if(!isPrimitive(property.getType())) {
+                            writer.append(" && (").append("oldValue != null && !oldValue.equals(newValue))");
+                        }
+                        writer.append(");\n");
+                    }
+
+                    if(threadSafe) {
+                        writer.append(indent(--shift)).append("} finally {\n")
+                            .append(indent(++shift)).append(INSTANCE_LOCK).append(".writeLock().unlock();\n")
+                            .append(indent(--shift)).append("}\n");
+                    }
+
                     //generate code for firing PropertyChangeEvent
                     if(propertySupport) {
                         writer.append(indent(shift)).append("if (isPropertyChanged) {\n")
-                              .append(indent(++shift)).append("this.propertySupport.firePropertyChange(\"").append(property.getName()).append("\", " + toAtomicGetValue(property, "oldValue") + ", " + toAtomicGetValue(property, "newValue") + ");\n")
+                              .append(indent(++shift)).append("this.propertySupport.firePropertyChange(\"").append(property.getName()).append("\", oldValue, newValue);\n")
                               .append(indent(--shift)).append("}\n");
                     }
-                    
                     writer.append(indent(--shift)).append("}\n\n");
                 }
             }
         }
         return shift;
-    }    
-
-    protected int generateAtomicConstructors(Writer writer, int shift, String className, InterfaceDefinition definition, TypeElement element, Elements elementUtils, Types typeUtils) throws IOException {
-        shift = generateAtomicFullArgConstructor(writer, shift, className, definition, element, elementUtils, typeUtils);
-
-        int readablePropertyCount = 0;
-        int writablePropertyCount = 0;
-        for (Property property : definition.getProperties()) {
-            if(!property.isIgnored()) {
-                if(property.isReadable()) readablePropertyCount++;
-                if(property.isWritable()) writablePropertyCount++;
-            }
-        }
-
-        if(readablePropertyCount >= writablePropertyCount) {
-            shift = generateAtomicReadOnlyFieldConstructor(writer, shift, className, definition, element, elementUtils, typeUtils);
-        }
-
-        return shift;
-    }    
-    
-    protected void generateAssiningValueToAtomicFields(Property property, Writer writer, int shift) throws IOException {
-        TypeMirror propertyType = property.getType();
-
-        writer.append(indent(shift)).append("this.").append(toSafeName(property.getName()))
-            .append(isPrimitive(propertyType) ? ".set(" : " = ")
-            .append(isPrimitive(propertyType) ? toAtomicAssignableValue(property) : retain(property))
-            .append(isPrimitive(propertyType) ? ")" : "")
-            .append(";\n");
     }
     
-    protected int generateConstructors(Writer writer, int shift, String className, InterfaceDefinition definition, TypeElement element, Elements elementUtils, Types typeUtils) throws IOException {
+    protected int generateConstructors(Writer writer, int shift, AnnotationMirror annotation, String className, InterfaceDefinition definition, TypeElement element, Elements elementUtils, Types typeUtils) throws IOException {
         shift = generateFullArgConstructor(writer, shift, className, definition, element, elementUtils, typeUtils);
 
         int readablePropertyCount = 0;
@@ -611,37 +348,6 @@ public class InterfaceProcessor extends AbstractProcessor {
         return shift;
     }
     
-    protected int generateAtomicFullArgConstructor(Writer writer, int shift, String className, InterfaceDefinition definition, TypeElement element, Elements elementUtils, Types typeUtils) throws IOException {
-        writer.append(indent(shift)).append("public ").append(className).append("(");
-        boolean isFirst = true;
-        for (Property property : definition.getProperties()) {
-            if(!property.isIgnored()) {
-                String type = property.getType().toString();
-                if(!isFirst) {
-                    writer.append(", ");
-                } else {
-                    isFirst = false;
-                }
-                writer.append(type).append(" ").append(toSafeName(property.getName()));
-            }
-        }
-        writer.append(") {\n");
-        writer.append(indent(++shift)).append("super();\n");
-        for (Property property : definition.getProperties()) {
-            if(!property.isIgnored()) {
-                generateAssiningValueToAtomicFields(property, writer, shift);
-            }
-        }
-
-        if(isPropertyChangeEventAware(element, elementUtils, typeUtils)) {
-            generatePropertySupport(writer, shift, elementUtils);
-        }
-
-        writer.append(indent(--shift)).append("}\n\n");
-        return shift;        
-    }
-   
-
     /**
      * Generate source of a constructor having parameters for all read-only properties.<br/>
      * If there is no read-only property, a default no-arg constructor is generated.
@@ -688,41 +394,6 @@ public class InterfaceProcessor extends AbstractProcessor {
         return shift;
     }
     
-    protected int generateAtomicReadOnlyFieldConstructor(Writer writer, int shift, String className, InterfaceDefinition definition, TypeElement element, Elements elementUtils, Types typeUtils) throws IOException {
-        writer.append(indent(shift)).append("public ").append(className).append("(");
-        boolean isFirst = true;
-        for (Property property : definition.getProperties()) {
-            if(!property.isIgnored()) {
-                if(!property.isWritable() && property.isReadable()) {
-                    String type = property.getType().toString();
-                    if(!isFirst) {
-                        writer.append(", ");
-                    } else {
-                        isFirst = false;
-                    }
-                    writer.append(type).append(" ").append(toSafeName(property.getName()));
-                }
-            }
-        }
-        writer.append(") {\n");
-        shift++;
-        writer.append(indent(shift)).append("super();\n");
-        for (Property property : definition.getProperties()) {
-            if(!property.isIgnored()) {
-                if(!property.isWritable() && property.isReadable()) {
-                    generateAssiningValueToAtomicFields(property, writer, shift);                    
-                }
-            }
-        }
-
-        if(isPropertyChangeEventAware(element, elementUtils, typeUtils)) {
-            generatePropertySupport(writer, shift, elementUtils);
-        }
-
-        writer.append(indent(--shift)).append("}\n\n");
-        return shift;        
-    }
-    
     protected int generateDefaultConstructor(Writer writer, int shift, String className, InterfaceDefinition definition) throws IOException {
         writer.append(indent(shift)).append("public ").append(className).append("(").append(") {\n")
               .append(indent(++shift)).append("super();\n")
@@ -730,59 +401,9 @@ public class InterfaceProcessor extends AbstractProcessor {
         return shift;
     }
 
-    
-    protected int generateAtomicEquals(Writer writer, int shift, InterfaceDefinition definition, String className, boolean isHavingSuperClass) throws IOException {
-
-        writer.append(indent(shift)).append("@Override\n")
-              .append(indent(shift)).append("public boolean equals(Object obj) {\n")
-              .append(indent(++shift)).append(INSTANCE_LOCK).append(".lock();\n")
-              .append(indent(shift)).append("try {\n")
-              .append(indent(++shift)).append("if (obj == null) {\n")
-              .append(indent(++shift)).append("return false;\n")
-              .append(indent(--shift)).append("}\n\n")
-              .append(indent(shift)).append("if (!(obj instanceof ").append(className).append(")) {\n")
-              .append(indent(++shift)).append("return false;\n")
-              .append(indent(--shift)).append("}\n\n")
-              .append(indent(shift)).append("final ").append(className).append(" other = (").append(className).append(") obj;\n");
-
-        for (Property property : definition.getProperties()) {
-            if(!property.isIgnored()) {
-                if(isPrimitive(property.getType())) {
-                    switch(property.getType().getKind()) {
-                        case FLOAT:
-                        case DOUBLE:
-                            writer.append(indent(shift)).append("if (").append(toVariableName(property, "this.")).append(".get() != ").append(toVariableName(property, "other.")).append(".get()) {\n")
-                                .append(indent(++shift)).append("return false;\n")
-                                .append(indent(--shift)).append("}\n");
-                            break;
-                        default:
-                            writer.append(indent(shift)).append("if (").append(toAtomicGet(property, "this.")).append(" != ").append(toAtomicGet(property, "other.")).append(") {\n")
-                                .append(indent(++shift)).append("return false;\n")
-                                .append(indent(--shift)).append("}\n");
-                    }
-                } else {
-                    shift = generateEqualForOneProperty(property, writer, shift);
-                }
-            }
-        }
+    protected int generateEquals(Writer writer, int shift, AnnotationMirror annotation, InterfaceDefinition definition, String className, boolean isHavingSuperClass, TypeElement element, Elements elementUtils, Types typeUtils) throws IOException {
+        boolean threadSafe = isThreadSafe(elementUtils, typeUtils, annotation);
         
-        if(isHavingSuperClass) {
-            writer.append(indent(shift)).append("if (!super.equals(obj)) {\n")
-                  .append(indent(++shift)).append("return false;\n")
-                  .append(indent(--shift)).append("}\n");
-        }
-        
-        writer.append(indent(--shift)).append("} finally {\n")
-              .append(indent(++shift)).append(INSTANCE_LOCK).append(".unlock();\n")
-              .append(indent(--shift)).append("}\n");
-
-        writer.append(indent(shift)).append("return true;\n");
-        writer.append(indent(--shift)).append("}\n\n");
-        return shift;
-    }
-    
-    protected int generateEquals(Writer writer, int shift, InterfaceDefinition definition, String className, boolean isHavingSuperClass) throws IOException {
-
         writer.append(indent(shift)).append("@Override\n")
               .append(indent(shift)).append("public boolean equals(Object obj) {\n")
               .append(indent(++shift)).append("if (obj == null) {\n")
@@ -792,6 +413,11 @@ public class InterfaceProcessor extends AbstractProcessor {
               .append(indent(++shift)).append("return false;\n")
               .append(indent(--shift)).append("}\n\n")
               .append(indent(shift)).append("final ").append(className).append(" other = (").append(className).append(") obj;\n");
+
+        if(threadSafe) {
+            writer.append(indent(shift)).append(INSTANCE_LOCK).append(".readLock().lock();\n")
+                  .append(indent(shift++)).append("try {\n");
+        }
 
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
@@ -802,6 +428,12 @@ public class InterfaceProcessor extends AbstractProcessor {
         if(isHavingSuperClass) {
             writer.append(indent(shift)).append("if (!super.equals(obj)) {\n")
                   .append(indent(++shift)).append("return false;\n")
+                  .append(indent(--shift)).append("}\n");
+        }
+
+        if(threadSafe) {
+            writer.append(indent(--shift)).append("} finally {\n")
+                  .append(indent(++shift)).append(INSTANCE_LOCK).append(".readLock().unlock();\n")
                   .append(indent(--shift)).append("}\n");
         }
 
@@ -837,10 +469,16 @@ public class InterfaceProcessor extends AbstractProcessor {
         return shift;
     }
 
-    protected int generateHashCode(Writer writer, int shift, InterfaceDefinition definition, String className, boolean isHavingSuperClass) throws IOException {
+    protected int generateHashCode(Writer writer, int shift, AnnotationMirror annotation, InterfaceDefinition definition, String className, boolean isHavingSuperClass, TypeElement element, Elements elementUtils, Types typeUtils) throws IOException {
+        boolean threadSafe = isThreadSafe(elementUtils, typeUtils, annotation);
         writer.append(indent(shift)).append("@Override\n")
               .append(indent(shift)).append("public int hashCode() {\n")
               .append(indent(++shift)).append("int result = 17;\n");
+
+        if(threadSafe) {
+            writer.append(indent(shift)).append(INSTANCE_LOCK).append(".readLock().lock();\n")
+                  .append(indent(shift++)).append("try {\n");
+        }
 
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
@@ -850,6 +488,12 @@ public class InterfaceProcessor extends AbstractProcessor {
 
         if(isHavingSuperClass) {
             writer.append(indent(shift)).append("result = 31 * result + ").append("super.hashCode();\n");
+        }
+
+        if(threadSafe) {
+            writer.append(indent(--shift)).append("} finally {\n")
+                  .append(indent(++shift)).append(INSTANCE_LOCK).append(".readLock().unlock();\n")
+                  .append(indent(--shift)).append("}\n");
         }
 
         writer.append(indent(shift)).append("return result;\n");
@@ -884,59 +528,18 @@ public class InterfaceProcessor extends AbstractProcessor {
         writer.append(indent(shift)).append("result = 31 * result + ").append(expression).append(";\n");
     }
     
-    protected int generateAtomicHashCode(Writer writer, int shift, InterfaceDefinition definition, String className, boolean isHavingSuperClass) throws IOException {
-        final String instanceLockName = "instanceLock";
+    protected int generateToString(Writer writer, int shift, AnnotationMirror annotation, InterfaceDefinition definition, String className, boolean isHavinsSuperClass, TypeElement element, Elements elementUtils, Types typeUtils) throws IOException {
+        boolean threadSafe = isThreadSafe(elementUtils, typeUtils, annotation);
+
         writer.append(indent(shift)).append("@Override\n")
-              .append(indent(shift)).append("public int hashCode() {\n")
-              .append(indent(++shift)).append("int result = 17;\n")
-              .append(indent(shift)).append(instanceLockName).append(".lock();\n")
-              .append(indent(shift++)).append("try {\n");
-        
-        for (Property property : definition.getProperties()) {
-            if(!property.isIgnored()) {
-                if(isPrimitive(property.getType())) {
-                    String expression = null;
-                    switch(property.getType().getKind()) {
-                        case FLOAT:
-                            expression = toVariableName(property, "this.") + ".get()";
-                            break;
-                        case DOUBLE:
-                            expression = "(int) (" + toVariableName(property, "this.") + ".get() ^ (" + toVariableName(property, "this.") + ".get() >>> 32))";
-                            break;
-                        case BOOLEAN:
-                            expression = "(" + toAtomicGet(property, "this.") + " ? 1 : 0)";
-                            break;
-                        case LONG:
-                            expression = "(int) (" + toAtomicGet(property, "this.") + " ^ (" + toAtomicGet(property, "this.") + " >>> 32))";
-                            break;
-                        default:
-                            expression = toAtomicGet(property, "this.");
-                    }
-                    writer.append(indent(shift)).append("result = 31 * result + ").append(expression).append(";\n");
-                } else {
-                    generateHashCodeForOneProperty(property, writer, shift);
-                }
-            }
+              .append(indent(shift++)).append("public String toString() {\n");
+
+        if(threadSafe) {
+            writer.append(indent(shift)).append(INSTANCE_LOCK).append(".readLock().lock();\n")
+                  .append(indent(shift++)).append("try {\n");
         }
 
-        if(isHavingSuperClass) {
-            writer.append(indent(shift)).append("result = 31 * result + ").append("super.hashCode();\n");
-        }
-        
-        writer.append(indent(--shift)).append("} finally {\n")
-              .append(indent(++shift)).append(instanceLockName).append(".unlock();\n")
-              .append(indent(--shift)).append("}\n");
-
-        writer.append(indent(shift)).append("return result;\n");
-        writer.append(indent(--shift)).append("}\n\n");
-
-        return shift;
-    }    
-
-    protected int generateToString(Writer writer, int shift, InterfaceDefinition definition, String className, boolean isHavinsSuperClass) throws IOException {
-        writer.append(indent(shift)).append("@Override\n")
-              .append(indent(shift)).append("public String toString() {\n")
-              .append(indent(++shift)).append("return \"").append(className).append("{\"\n");
+        writer.append(indent(shift)).append("return \"").append(className).append("{\"\n");
 
         shift++;
         boolean isFirst = true;
@@ -958,60 +561,17 @@ public class InterfaceProcessor extends AbstractProcessor {
         writer.append(indent(shift)).append(" + '}';\n");
         shift--;
 
+        if(threadSafe) {
+            writer.append(indent(--shift)).append("} finally {\n")
+                  .append(indent(++shift)).append(INSTANCE_LOCK).append(".readLock().unlock();\n")
+                  .append(indent(--shift)).append("}\n");
+        }
+
         writer.append(indent(--shift)).append("}\n\n");
 
         return shift;
     }
     
-    protected int generateAtomicToString(Writer writer, int shift, InterfaceDefinition definition, String className, boolean isHavinsSuperClass) throws IOException {
-        writer.append(indent(shift)).append("@Override\n")
-              .append(indent(shift)).append("public String toString() {\n")
-              .append(indent(++shift)).append("StringBuilder sb = new StringBuilder();\n")
-              .append(indent(shift)).append("sb.append(\"").append(className).append("{\");\n")
-              .append(indent(shift)).append(INSTANCE_LOCK).append(".lock();\n")
-              .append(indent(shift++)).append("try {\n");
-
-        boolean isFirst = true;
-        for (Property property : definition.getProperties()) {
-            if(!property.isIgnored()) {
-                final String fieldName = toSafeName(property.getName());
-                final String readLockName = fieldName + "ReadLock";
-                
-                if(!isPrimitive(property.getType())) {
-                    writer.append(indent(shift)).append(readLockName).append(".lock();\n")
-                          .append(indent(shift++)).append("try {\n");
-                }
-                
-                writer.append(indent(shift)).append("sb.append(\"");
-                if(!isFirst) writer.append(", ");
-                writer.append(fieldName).append("=\").append(").append(fieldName).append(");\n");
-                if(isFirst) isFirst = false;
-                
-                if(!isPrimitive(property.getType())) {
-                    writer.append(indent(--shift)).append("} finally {\n")
-                          .append(indent(++shift)).append(readLockName).append(".unlock();\n")
-                          .append(indent(--shift)).append("}\n");
-                }
-            }
-        }
-        if(isHavinsSuperClass) {
-            writer.append(indent(shift)).append("sb.append(\"");
-            if(!isFirst) writer.append(", ");
-            writer.append("superClass=\").append(super.toString());\n");
-            if(isFirst) isFirst = false;
-        }
-        writer.append(indent(shift)).append("sb.append(\"}\");\n")
-              .append(indent(--shift)).append("} finally {\n")
-              .append(indent(++shift)).append(INSTANCE_LOCK).append(".unlock();\n")
-              .append(indent(--shift)).append("}\n");
-        
-        writer.append(indent(shift)).append("return sb.toString();\n");
-
-        writer.append(indent(--shift)).append("}\n\n");
-
-        return shift;
-    }    
-
     protected int generateClone(Writer writer, int shift, InterfaceDefinition definition, String className) throws IOException {
         writer.append(indent(shift)).append("@Override\n")
               .append(indent(shift)).append("public ").append(className).append(" clone() {\n")
