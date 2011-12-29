@@ -50,6 +50,8 @@ import javax.lang.model.util.Types;
 @SupportedAnnotationTypes({"com.shelfmap.interfaceprocessor.annotation.GenerateClass"})
 public class InterfaceProcessor extends AbstractProcessor {
 
+    private static final String INSTANCE_LOCK = "instanceLock";
+    
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment re) {
         if(annotations.isEmpty()) return false;
@@ -308,18 +310,18 @@ public class InterfaceProcessor extends AbstractProcessor {
                     final String readLockName = fieldName + "ReadLock";
                     final String writerLockName = fieldName + "WriteLock";
                     writer.append(indent(shift))
-                          .append(modifierStr).append("final java.util.concurrent.locks.ReentrantReadWriteLock ")
+                          .append(modifierStr).append("final java.util.concurrent.locks.ReadWriteLock ")
                           .append(rwLockName).append(" = new java.util.concurrent.locks.ReentrantReadWriteLock();\n");
                     
                     if(property.isReadable()) {
                         writer.append(indent(shift))
-                            .append(modifierStr).append("final java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock ")
+                            .append(modifierStr).append("final java.util.concurrent.locks.Lock ")
                             .append(readLockName).append(" = ").append(rwLockName).append(".readLock();\n");
                     }
                     
                     if(property.isWritable()) {
                         writer.append(indent(shift))
-                            .append(modifierStr).append("final java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock ")
+                            .append(modifierStr).append("final java.util.concurrent.locks.Lock ")
                             .append(writerLockName).append(" = ").append(rwLockName).append(".writeLock();\n");
                     }
                     
@@ -331,6 +333,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         if(isPropertyChangeEventAware(element, elementUtils, typeUtils)) {
             generatePropertySupportField(elementUtils, writer, shift);
         }
+        writer.append(indent(shift)).append("final java.util.concurrent.locks.Lock instanceLock = new java.util.concurrent.locks.ReentrantLock();\n");
 
         writer.append("\n");
         return shift;
@@ -422,10 +425,17 @@ public class InterfaceProcessor extends AbstractProcessor {
                     writer.append(indent(shift)).append("public ").append(propertyTypeStr).append(isBoolean(property.getType(), typeUtils) ? " is" : " get").append(capitalize(property.getName())).append("() {\n");
                     
                     if(isPrimitive(propertyType)) {
-                        writer.append(indent(++shift)).append("return ").append(toAtomicGet(property, "this.")).append(";\n");
+                        writer.append(indent(++shift)).append(INSTANCE_LOCK).append(".lock();\n")
+                              .append(indent(shift)).append(INSTANCE_LOCK).append(".unlock();\n")
+                              .append(indent(shift)).append("return ").append(toAtomicGet(property, "this.")).append(";\n");
                     } else {
                         final String readLockName = fieldName + "ReadLock";
-                        writer.append(indent(++shift)).append(readLockName).append(".lock();\n")
+                        writer.append(indent(++shift)).append(INSTANCE_LOCK).append(".lock();\n")
+                              .append(indent(shift)).append("try {\n")
+                              .append(indent(++shift)).append(readLockName).append(".lock();\n")
+                              .append(indent(--shift)).append("} finally {\n")
+                              .append(indent(++shift)).append(INSTANCE_LOCK).append(".unlock();\n")
+                              .append(indent(--shift)).append("}\n")
                               .append(indent(shift)).append("try {\n")
                               .append(indent(++shift)).append("return ").append(retain(property, "this.")).append(";\n")
                               .append(indent(--shift)).append("} finally {\n")
@@ -475,7 +485,12 @@ public class InterfaceProcessor extends AbstractProcessor {
                         if(propertySupport) {
                             writer.append(indent(shift)).append(propertyTypeStr).append(" oldValue = null;\n");
                         }
-                        writer.append(indent(shift)).append(writeLockName).append(".lock();\n");
+                        writer.append(indent(shift)).append(INSTANCE_LOCK).append(".lock();\n")
+                              .append(indent(shift)).append("try {\n")
+                              .append(indent(++shift)).append(writeLockName).append(".lock();\n")
+                              .append(indent(--shift)).append("} finally {\n")
+                              .append(indent(++shift)).append(INSTANCE_LOCK).append(".unlock();\n")
+                              .append(indent(--shift)).append("}\n");
                               
                         writer.append(indent(shift)).append("try {\n")
                               .append(indent(++shift)).append("newValue = ").append(retain(property)).append(";\n");
@@ -720,6 +735,8 @@ public class InterfaceProcessor extends AbstractProcessor {
 
         writer.append(indent(shift)).append("@Override\n")
               .append(indent(shift)).append("public boolean equals(Object obj) {\n")
+              .append(indent(++shift)).append(INSTANCE_LOCK).append(".lock();\n")
+              .append(indent(shift)).append("try {\n")
               .append(indent(++shift)).append("if (obj == null) {\n")
               .append(indent(++shift)).append("return false;\n")
               .append(indent(--shift)).append("}\n\n")
@@ -744,17 +761,8 @@ public class InterfaceProcessor extends AbstractProcessor {
                                 .append(indent(--shift)).append("}\n");
                     }
                 } else {
-                    final String readLockName = toSafeName(property.getName()) + "ReadLock";
-                    writer.append(indent(shift)).append(readLockName).append(".lock();\n")
-                          .append(indent(shift++)).append("try {\n");
-                    
                     shift = generateEqualForOneProperty(property, writer, shift);
-                    
-                    writer.append(indent(--shift)).append("} finally {\n")
-                          .append(indent(++shift)).append(readLockName).append(".unlock();\n")
-                          .append(indent(--shift)).append("}\n");
                 }
-                
             }
         }
         
@@ -763,6 +771,10 @@ public class InterfaceProcessor extends AbstractProcessor {
                   .append(indent(++shift)).append("return false;\n")
                   .append(indent(--shift)).append("}\n");
         }
+        
+        writer.append(indent(--shift)).append("} finally {\n")
+              .append(indent(++shift)).append(INSTANCE_LOCK).append(".unlock();\n")
+              .append(indent(--shift)).append("}\n");
 
         writer.append(indent(shift)).append("return true;\n");
         writer.append(indent(--shift)).append("}\n\n");
@@ -873,14 +885,17 @@ public class InterfaceProcessor extends AbstractProcessor {
     }
     
     protected int generateAtomicHashCode(Writer writer, int shift, InterfaceDefinition definition, String className, boolean isHavingSuperClass) throws IOException {
+        final String instanceLockName = "instanceLock";
         writer.append(indent(shift)).append("@Override\n")
               .append(indent(shift)).append("public int hashCode() {\n")
-              .append(indent(++shift)).append("int result = 17;\n");
-
+              .append(indent(++shift)).append("int result = 17;\n")
+              .append(indent(shift)).append(instanceLockName).append(".lock();\n")
+              .append(indent(shift++)).append("try {\n");
+        
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
-                String expression = null;
                 if(isPrimitive(property.getType())) {
+                    String expression = null;
                     switch(property.getType().getKind()) {
                         case FLOAT:
                             expression = toVariableName(property, "this.") + ".get()";
@@ -899,15 +914,7 @@ public class InterfaceProcessor extends AbstractProcessor {
                     }
                     writer.append(indent(shift)).append("result = 31 * result + ").append(expression).append(";\n");
                 } else {
-                    final String readLockName = toSafeName(property.getName()) + "ReadLock";
-                    writer.append(indent(shift)).append(readLockName).append(".lock();\n")
-                          .append(indent(shift++)).append("try {\n");
-                    
                     generateHashCodeForOneProperty(property, writer, shift);
-                    
-                    writer.append(indent(--shift)).append("} finally {\n")
-                          .append(indent(++shift)).append(readLockName).append(".unlock();\n")
-                          .append(indent(--shift)).append("}\n");
                 }
             }
         }
@@ -915,6 +922,10 @@ public class InterfaceProcessor extends AbstractProcessor {
         if(isHavingSuperClass) {
             writer.append(indent(shift)).append("result = 31 * result + ").append("super.hashCode();\n");
         }
+        
+        writer.append(indent(--shift)).append("} finally {\n")
+              .append(indent(++shift)).append(instanceLockName).append(".unlock();\n")
+              .append(indent(--shift)).append("}\n");
 
         writer.append(indent(shift)).append("return result;\n");
         writer.append(indent(--shift)).append("}\n\n");
@@ -956,7 +967,9 @@ public class InterfaceProcessor extends AbstractProcessor {
         writer.append(indent(shift)).append("@Override\n")
               .append(indent(shift)).append("public String toString() {\n")
               .append(indent(++shift)).append("StringBuilder sb = new StringBuilder();\n")
-              .append(indent(shift)).append("sb.append(\"").append(className).append("{\");\n");
+              .append(indent(shift)).append("sb.append(\"").append(className).append("{\");\n")
+              .append(indent(shift)).append(INSTANCE_LOCK).append(".lock();\n")
+              .append(indent(shift++)).append("try {\n");
 
         boolean isFirst = true;
         for (Property property : definition.getProperties()) {
@@ -987,7 +1000,11 @@ public class InterfaceProcessor extends AbstractProcessor {
             writer.append("superClass=\").append(super.toString());\n");
             if(isFirst) isFirst = false;
         }
-        writer.append(indent(shift)).append("sb.append(\"}\");\n");
+        writer.append(indent(shift)).append("sb.append(\"}\");\n")
+              .append(indent(--shift)).append("} finally {\n")
+              .append(indent(++shift)).append(INSTANCE_LOCK).append(".unlock();\n")
+              .append(indent(--shift)).append("}\n");
+        
         writer.append(indent(shift)).append("return sb.toString();\n");
 
         writer.append(indent(--shift)).append("}\n\n");
