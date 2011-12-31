@@ -9,7 +9,7 @@ import javax.lang.model.type.TypeMirror;
  * If the {@code canHandle} method return false, InterfaceProcessor ignore the type
  * then it do not generate any method for the type.
  * 
- * @author t_yano
+ * @author Tsutomu YANO
  */
 public interface InterfaceFilter {
     boolean canHandle(TypeMirror type);

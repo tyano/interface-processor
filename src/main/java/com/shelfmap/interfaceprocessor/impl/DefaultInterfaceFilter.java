@@ -9,7 +9,7 @@ import javax.lang.model.util.Types;
 /**
  * A default implementation of {@code InterfaceFilter}.<br>
  * In default, {@code PropertyChangeEventAware} is ignored.
- * @author t_yano
+ * @author Tsutomu YANO
  */
 public class DefaultInterfaceFilter implements InterfaceFilter {
 

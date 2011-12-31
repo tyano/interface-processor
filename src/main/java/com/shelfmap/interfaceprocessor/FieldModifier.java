@@ -2,7 +2,7 @@ package com.shelfmap.interfaceprocessor;
 
 /**
  * Access modifier for a field.
- * @author t_yano
+ * @author Tsutomu YANO
  */
 public enum FieldModifier {
     PRIVATE("private"), DEFAULT(""), PROTECTED("protected");
