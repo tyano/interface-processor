@@ -15,6 +15,7 @@
  */
 package com.shelfmap.interfaceprocessor;
 
+import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.type.TypeMirror;
 
 /**
@@ -23,9 +24,7 @@ import javax.lang.model.type.TypeMirror;
  */
 public interface Property {
     boolean isReadable();
-    void setReadable(boolean readable);
     boolean isWritable();
-    void setWritable(boolean writable);
 
     String getName();
     TypeMirror getType();
@@ -38,4 +37,9 @@ public interface Property {
     
     boolean isIgnored();
     void setIgnored(boolean ignore);
+    
+    ExecutableElement getReader();
+    void setReader(ExecutableElement element);
+    ExecutableElement getWriter();
+    void setWriter(ExecutableElement element);
 }

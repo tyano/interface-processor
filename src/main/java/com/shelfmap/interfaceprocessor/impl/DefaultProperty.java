@@ -16,6 +16,7 @@
 package com.shelfmap.interfaceprocessor.impl;
 
 import com.shelfmap.interfaceprocessor.Property;
+import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.type.TypeMirror;
 
 /**
@@ -31,12 +32,16 @@ public class DefaultProperty implements Property {
     private String retainType = "HOLD";
     private TypeMirror realType;
     private boolean ignore;
+    private ExecutableElement reader;
+    private ExecutableElement writer;
 
-    public DefaultProperty(String name, TypeMirror type, boolean readable, boolean writable) {
+    public DefaultProperty(String name, TypeMirror type, ExecutableElement reader, ExecutableElement writer) {
         this.name = name;
         this.type = type;
-        this.readable = readable;
-        this.writable = writable;
+        this.readable = (reader != null);
+        this.writable = (writer != null);
+        this.reader = reader;
+        this.writer = writer;
     }
 
     @Override
@@ -45,18 +50,8 @@ public class DefaultProperty implements Property {
     }
 
     @Override
-    public void setReadable(boolean readable) {
-        this.readable = readable;
-    }
-
-    @Override
     public boolean isWritable() {
         return writable;
-    }
-
-    @Override
-    public void setWritable(boolean writable) {
-        this.writable = writable;
     }
 
     @Override
@@ -89,11 +84,35 @@ public class DefaultProperty implements Property {
         this.realType = type;
     }
 
+    @Override
     public boolean isIgnored() {
         return ignore;
     }
 
+    @Override
     public void setIgnored(boolean ignore) {
         this.ignore = ignore;
+    }
+
+    @Override
+    public ExecutableElement getReader() {
+        return reader;
+    }
+
+    @Override
+    public void setReader(ExecutableElement reader) {
+        this.reader = reader;
+        this.readable = reader != null;
+    }
+
+    @Override
+    public ExecutableElement getWriter() {
+        return writer;
+    }
+
+    @Override
+    public void setWriter(ExecutableElement writer) {
+        this.writer = writer;
+        this.writable = writer != null;
     }
 }
