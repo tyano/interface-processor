@@ -18,7 +18,6 @@ package com.shelfmap.interfaceprocessor;
 import com.shelfmap.interfaceprocessor.impl.DefaultProperty;
 import static com.shelfmap.interfaceprocessor.util.Strings.*;
 
-import com.sun.tools.internal.xjc.reader.TypeUtil;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -38,6 +37,17 @@ import javax.lang.model.util.Types;
  */
 public class PropertyVisitor extends ElementScanner6<Void, Environment> {
 
+    private final InterfaceFilter interfaceFilter;
+
+    public PropertyVisitor(InterfaceFilter interfaceFilter, Void defaultValue) {
+        super(defaultValue);
+        this.interfaceFilter = interfaceFilter;
+    }
+
+    public PropertyVisitor(InterfaceFilter interfaceFilter) {
+        this.interfaceFilter = interfaceFilter;
+    }
+    
     /**
      * {@inheritDoc }
      *
@@ -51,7 +61,7 @@ public class PropertyVisitor extends ElementScanner6<Void, Environment> {
         for (TypeMirror superType : element.getInterfaces()) {
             Element superInterface = env.getProcessingEnvironment().getTypeUtils().asElement(superType);
             env.setLevel(env.getLevel() + 1);
-            if(!isPropertyEventAware(superType, env)) {
+            if(!interfaceFilter.canHandle(superType)) {
                 this.visit(superInterface, env);
             }
             env.setLevel(env.getLevel() - 1);
@@ -69,15 +79,6 @@ public class PropertyVisitor extends ElementScanner6<Void, Environment> {
             definition.addTypeParameters(element.getTypeParameters().toArray(new TypeParameterElement[0]));
         }
         return super.visitType(element, env);
-    }
-
-    private boolean isPropertyEventAware(TypeMirror type, Environment env) {
-        ProcessingEnvironment p = env.getProcessingEnvironment();
-        Types typeUtils = p.getTypeUtils();
-        Elements elementUtils = p.getElementUtils();
-
-        TypeMirror propertySupportType = elementUtils.getTypeElement(PropertyChangeEventAware.class.getName()).asType();
-        return typeUtils.isSubtype(type, propertySupportType);
     }
 
     private String[] splitPackageName(String value) {
@@ -123,34 +124,34 @@ public class PropertyVisitor extends ElementScanner6<Void, Environment> {
 
     private void mergeProperty(Property p1, Property p2) {
         if(p2.isReadable()) {
-            p1.setReadable(true);
+            p1.setReader(p2.getReader());
         }
 
         if(p2.isWritable()) {
-            p1.setWritable(true);
+            p1.setWriter(p2.getWriter());
         }
     }
 
     private Property buildPropertyFromExecutableElement(ExecutableElement ee, ProcessingEnvironment p) {
         String name = ee.getSimpleName().toString();
 
-        Types types = p.getTypeUtils();
-        Elements elements = p.getElementUtils();
+        Types typeUtil = p.getTypeUtils();
+        Elements elementUtil = p.getElementUtils();
 
         Property property = null;
         if(name.startsWith("get") || name.startsWith("set") || name.startsWith("is")) {
             if(name.startsWith("get")) {
-                property = new DefaultProperty(uncapitalize(name.substring(3)), ee.getReturnType(), true, false);
+                property = new DefaultProperty(uncapitalize(name.substring(3)), ee.getReturnType(), ee, null);
             } else if(name.startsWith("set")) {
                 if(ee.getParameters().size() == 1) {
-                    property = new DefaultProperty(uncapitalize(name.substring(3)), ee.getParameters().get(0).asType(), false, true);
+                    property = new DefaultProperty(uncapitalize(name.substring(3)), ee.getParameters().get(0).asType(), null, ee);
                 }
             } else if(name.startsWith("is")) {
-                PrimitiveType bool = types.getPrimitiveType(TypeKind.BOOLEAN);
-                if(types.isSameType(ee.getReturnType(), bool) ||
-                   types.isSameType(ee.getReturnType(), types.boxedClass(bool).asType())) {
+                PrimitiveType bool = typeUtil.getPrimitiveType(TypeKind.BOOLEAN);
+                if(typeUtil.isSameType(ee.getReturnType(), bool) ||
+                   typeUtil.isSameType(ee.getReturnType(), typeUtil.boxedClass(bool).asType())) {
 
-                    property =  new DefaultProperty(uncapitalize(name.substring(2)), ee.getReturnType(), true, false);
+                    property =  new DefaultProperty(uncapitalize(name.substring(2)), ee.getReturnType(), ee, null);
                 }
             }
 
@@ -161,14 +162,14 @@ public class PropertyVisitor extends ElementScanner6<Void, Environment> {
                 for (AnnotationMirror annotation : annotations) {
 
                     //is the annotationMirror same with "com.shelfmap.simplequery.annotation.Property" ?
-                    TypeElement propertyAnnotationType = elements.getTypeElement(com.shelfmap.interfaceprocessor.annotation.Property.class.getName());
-                    if(types.isSameType(propertyAnnotationType.asType(), annotation.getAnnotationType())) {
+                    TypeElement propertyAnnotationType = elementUtil.getTypeElement(com.shelfmap.interfaceprocessor.annotation.Property.class.getName());
+                    if(typeUtil.isSameType(propertyAnnotationType.asType(), annotation.getAnnotationType())) {
 
                         //check all values through the found annotation
                         //and record the values into a Property instance.
                         //we can not use our loving useful Class<?> object here, because this program run in compile-time (no classloader for loading them!).
                         //so we must record the value as TypeMirror or a simple String object.
-                        Map<? extends ExecutableElement, ? extends AnnotationValue> valueMap = elements.getElementValuesWithDefaults(annotation);
+                        Map<? extends ExecutableElement, ? extends AnnotationValue> valueMap = elementUtil.getElementValuesWithDefaults(annotation);
                         for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry : valueMap.entrySet()) {
                             ExecutableElement key = entry.getKey();
                             AnnotationValue value = entry.getValue();
