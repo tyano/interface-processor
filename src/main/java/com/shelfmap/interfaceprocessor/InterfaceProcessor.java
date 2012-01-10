@@ -79,13 +79,17 @@ public class InterfaceProcessor extends AbstractProcessor {
                 String className = resolveImplementationClassName(generateAnnotation, definition);
                 String fullClassName = packageName + "." + className;
 
+                if(!precheck(definition, generateClassAnnotation, className, element)) {
+                    continue;
+                }
+                
                 Writer writer = null;
                 try {
                     Filer filer = processingEnv.getFiler();
                     JavaFileObject javaFile = filer.createSourceFile(fullClassName, targetInterface);
                     writer = javaFile.openWriter();
                     
-                    generateClassDefinition(writer, definition, generateClassAnnotation, className, targetInterface);
+                    generateClassDefinition(writer, generateClassAnnotation, definition, className, targetInterface);
 
                     boolean isHavingSuperClass = isHavingSuperClass(generateClassAnnotation);
                     FieldModifier modifier = generateAnnotation.fieldModifier();
@@ -126,9 +130,10 @@ public class InterfaceProcessor extends AbstractProcessor {
         return new DefaultInterfaceFilter(elementUtils, typeUtils);
     }
 
-    protected void generateField(Property property, Writer writer, int shift, FieldModifier modifier) throws IOException {
+    protected int generateField(Property property, Writer writer, final int shift, FieldModifier modifier) throws IOException {
         String typeName = property.getType().toString();
         writer.append(indent(shift)).append(modifier.getModifier()).append((modifier == FieldModifier.DEFAULT ? "" : " ")).append(typeName).append(" ").append(toSafeName(property.getName())).append(";\n");
+        return shift;
     }
 
     protected int generateGetter(Writer writer, int shift, TypeElement element, AnnotationMirror generateClassAnnotation, Property property) throws IOException {
@@ -255,8 +260,12 @@ public class InterfaceProcessor extends AbstractProcessor {
     protected final boolean isAbstract(InterfaceDefinition definition) {
         return definition.getMethods().isEmpty() && !definition.isHavingIgnoredProperty();
     }
+    
+    protected boolean precheck(InterfaceDefinition definition, AnnotationMirror annotation, String className, Element element) {
+        return true;
+    }
 
-    protected void generateClassDefinition(Writer writer, InterfaceDefinition definition, AnnotationMirror annotation, String className, Element element) throws IOException {
+    protected void generateClassDefinition(Writer writer, AnnotationMirror annotation, InterfaceDefinition definition, String className, Element element) throws IOException {
         Elements elementUtils = processingEnv.getElementUtils();
 
         String packageName = resolvePackageName(annotation, definition);
@@ -292,7 +301,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
-                generateField(property, writer, shift, modifier);
+                shift = generateField(property, writer, shift, modifier);
             }
         }
 
@@ -338,25 +347,36 @@ public class InterfaceProcessor extends AbstractProcessor {
     protected int generateConstructors(Writer writer, int shift, AnnotationMirror generateClassAnnotation, InterfaceDefinition definition, String className, TypeElement targetInterface) throws IOException {
         shift = generateFullArgConstructor(writer, shift, className, definition, targetInterface);
 
+        int propertyCount = 0;
         int readablePropertyCount = 0;
         int writablePropertyCount = 0;
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
                 if(property.isReadable()) readablePropertyCount++;
                 if(property.isWritable()) writablePropertyCount++;
+                propertyCount++;
             }
         }
 
-        if(readablePropertyCount >= writablePropertyCount) {
-            shift = generateReadOnlyFieldConstructor(writer, shift, className, definition, targetInterface);
+        if(readablePropertyCount > writablePropertyCount) {
+            int readOnlyPropertyCount = readablePropertyCount - writablePropertyCount;
+            if(readOnlyPropertyCount != propertyCount) {
+                shift = generateReadOnlyFieldConstructor(writer, shift, className, definition, targetInterface);
+            }
         }
 
         return shift;
     }
     
-    private void generatePropertySupport(Writer writer, int shift, Elements elementUtils) throws IOException {
+    private int generatePropertySupport(Writer writer, int shift, Elements elementUtils) throws IOException {
         TypeMirror type = elementUtils.getTypeElement(PropertyChangeSupport.class.getName()).asType();
         writer.append(indent(shift)).append("this.propertySupport = ").append("new ").append(type.toString()).append("(this);\n");
+        return shift;
+    }
+    
+    protected int generatePropertyFieldInitializer(Writer writer, int shift, TypeElement element, Property property) throws IOException {
+        writer.append(indent(shift)).append("this.").append(toSafeName(property.getName())).append(" = ").append(retain(property)).append(";\n");
+        return shift;
     }
 
     protected int generateFullArgConstructor(Writer writer, int shift, String className, InterfaceDefinition definition, TypeElement element) throws IOException {
@@ -379,12 +399,12 @@ public class InterfaceProcessor extends AbstractProcessor {
         writer.append(indent(++shift)).append("super();\n");
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
-               writer.append(indent(shift)).append("this.").append(toSafeName(property.getName())).append(" = ").append(retain(property)).append(";\n");
+                shift = generatePropertyFieldInitializer(writer, shift, element, property);
             }
         }
 
         if(isPropertyChangeEventAware(element)) {
-            generatePropertySupport(writer, shift, elementUtils);
+            shift = generatePropertySupport(writer, shift, elementUtils);
         }
 
         writer.append(indent(--shift)).append("}\n\n");
@@ -426,13 +446,13 @@ public class InterfaceProcessor extends AbstractProcessor {
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
                 if(!property.isWritable() && property.isReadable()) {
-                    writer.append(indent(shift)).append("this.").append(toSafeName(property.getName())).append(" = ").append(retain(property)).append(";\n");
+                    shift = generatePropertyFieldInitializer(writer, shift, element, property);
                 }
             }
         }
 
         if(isPropertyChangeEventAware(element)) {
-            generatePropertySupport(writer, shift, elementUtils);
+            shift = generatePropertySupport(writer, shift, elementUtils);
         }
 
         writer.append(indent(--shift)).append("}\n\n");
