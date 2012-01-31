@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.*;
-import javax.lang.model.type.DeclaredType;
 
 
 import javax.lang.model.type.PrimitiveType;
@@ -48,7 +47,7 @@ public class PropertyVisitor extends ElementScanner6<Void, Environment> {
     public PropertyVisitor(InterfaceFilter interfaceFilter) {
         this.interfaceFilter = interfaceFilter;
     }
-    
+
     /**
      * {@inheritDoc }
      *
@@ -62,15 +61,15 @@ public class PropertyVisitor extends ElementScanner6<Void, Environment> {
         for (TypeMirror superType : element.getInterfaces()) {
             Element superInterface = env.getProcessingEnvironment().getTypeUtils().asElement(superType);
             env.setLevel(env.getLevel() + 1);
-            if(!interfaceFilter.canHandle(superType)) {
+            if(interfaceFilter.canHandle(superType)) {
                 this.visit(superInterface, env);
             }
             env.setLevel(env.getLevel() - 1);
         }
 
-        InterfaceDefinition definition = env.getInterfaceDefinition();
 
         if(env.getLevel() == 0) {
+            InterfaceDefinition definition = env.getInterfaceDefinition();
             String[] splited = splitPackageName(element.getQualifiedName().toString());
             if(splited == null) {
                 throw new IllegalStateException("the qualified name of the element " + element.toString() + " was a null or an empty string.");
