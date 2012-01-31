@@ -29,13 +29,13 @@ import java.lang.annotation.Target;
 @Target(ElementType.TYPE)
 public @interface GenerateClass {
     boolean autoGenerate() default true;
-    boolean threadSafe() default false;
+    boolean threadSafe() default true;
     String packageName() default "";
     boolean packageNameRelative() default false;
     String className() default "";
     Class<?> superClass() default Void.class;
-    boolean serializable() default false;
+    boolean serializable() default true;
     long serialVersion() default 1L;
-    boolean cloneable() default false;
+    boolean cloneable() default true;
     FieldModifier fieldModifier() default FieldModifier.PRIVATE;
 }
