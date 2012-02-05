@@ -78,7 +78,7 @@ public class InterfaceProcessor extends AbstractProcessor {
 
                 InterfaceDefinition definition = new DefaultInterfaceDefinition();
                 Environment visitorEnvironment = new BuildingEnvironment(processingEnv, definition);
-                PropertyVisitor visitor = new PropertyVisitor(createInterfaceFilter(generateAnnotation.ignoreSuperInterface()));
+                ElementVisitor<Void, Environment> visitor = createVisitor(createInterfaceFilter(generateAnnotation.ignoreSuperInterface()));
 
                 //collect information about the current interface into visitorEnviroment
                 visitor.visit(targetInterface, visitorEnvironment);
@@ -133,10 +133,14 @@ public class InterfaceProcessor extends AbstractProcessor {
         return processed;
     }
 
+    protected ElementVisitor<Void, Environment> createVisitor(InterfaceFilter filter) {
+        return new PropertyVisitor(filter);
+    }
+
     protected InterfaceFilter createInterfaceFilter(boolean ignoreSuperInterfaces) {
         Elements elementUtils = processingEnv.getElementUtils();
         Types typeUtils = processingEnv.getTypeUtils();
-        return ignoreSuperInterfaces 
+        return ignoreSuperInterfaces
                 ? new IgnoreSuperInterfaceFilter(elementUtils, typeUtils)
                 : new DefaultInterfaceFilter(elementUtils, typeUtils);
     }
@@ -391,6 +395,9 @@ public class InterfaceProcessor extends AbstractProcessor {
         }
 
         int readOnlyPropertyCount = readablePropertyCount - writablePropertyCount;
+        //if readOnlyPropertyCount == propertyCount,
+        //then the constructor for the read-only properties is same with the full-args constructor.
+        //we mustn't generate it here.
         if(readOnlyPropertyCount != propertyCount) {
             shift = generateReadOnlyFieldConstructor(writer, shift, className, definition, targetInterface);
         }
@@ -398,7 +405,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         return shift;
     }
 
-    private int generatePropertySupport(Writer writer, int shift, Elements elementUtils) throws IOException {
+    protected int generatePropertySupport(Writer writer, int shift, Elements elementUtils) throws IOException {
         TypeMirror type = elementUtils.getTypeElement(PropertyChangeSupport.class.getName()).asType();
         writer.append(indent(shift)).append("this.propertySupport = ").append("new ").append(type.toString()).append("(this);\n");
         return shift;
@@ -415,7 +422,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         writer.append(indent(shift)).append("public ").append(className).append("(");
         boolean isFirst = true;
         for (Property property : definition.getProperties()) {
-            if(!property.isIgnored()) {
+            if(!property.isIgnored() && canInitializeField(property, ConstructorGenerationType.FULL_ARG_CONSTRUCTOR, ConstructorGenerationPhase.CONSTRUCTOR_ARGUMENTS)) {
                 String type = property.getType().toString();
                 if(!isFirst) {
                     writer.append(", ");
@@ -428,7 +435,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         writer.append(") {\n");
         writer.append(indent(++shift)).append("super();\n");
         for (Property property : definition.getProperties()) {
-            if(!property.isIgnored()) {
+            if(!property.isIgnored() && canInitializeField(property, ConstructorGenerationType.FULL_ARG_CONSTRUCTOR, ConstructorGenerationPhase.FIELD_INITALIZATION)) {
                 shift = generatePropertyFieldInitializer(writer, shift, element, property);
             }
         }
@@ -459,7 +466,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         boolean isFirst = true;
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
-                if(!property.isWritable() && property.isReadable()) {
+                if(isReadOnlyProperty(property) && canInitializeField(property, ConstructorGenerationType.READ_ONLY_CONSTRUCTOR, ConstructorGenerationPhase.CONSTRUCTOR_ARGUMENTS)) {
                     String type = property.getType().toString();
                     if(!isFirst) {
                         writer.append(", ");
@@ -475,7 +482,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         writer.append(indent(shift)).append("super();\n");
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
-                if(!property.isWritable() && property.isReadable()) {
+                if(isReadOnlyProperty(property) && canInitializeField(property, ConstructorGenerationType.READ_ONLY_CONSTRUCTOR, ConstructorGenerationPhase.FIELD_INITALIZATION)) {
                     shift = generatePropertyFieldInitializer(writer, shift, element, property);
                 }
             }
@@ -487,6 +494,14 @@ public class InterfaceProcessor extends AbstractProcessor {
 
         writer.append(indent(--shift)).append("}\n\n");
         return shift;
+    }
+
+    protected boolean isReadOnlyProperty(Property property) {
+        return !property.isWritable() && property.isReadable();
+    }
+
+    protected boolean canInitializeField(Property property, ConstructorGenerationType generationType, ConstructorGenerationPhase generationPhase) {
+        return true;
     }
 
     protected int generateDefaultConstructor(Writer writer, int shift, String className, InterfaceDefinition definition) throws IOException {
@@ -684,7 +699,7 @@ public class InterfaceProcessor extends AbstractProcessor {
                   .append(indent(++shift)).append("throw new IllegalStateException(ex);\n")
                   .append(indent(--shift)).append("}\n");
         }
-        
+
         writer.append(indent(--shift)).append("}\n\n");
         return shift;
     }
@@ -903,7 +918,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         if(className.isEmpty()) {
             AnnotationValue resolverValue = getValueOfAnnotation(elementUtils.getElementValuesWithDefaults(generateClassAnnotation), "classNameResolver");
             assert resolverValue != null;
-            
+
             TypeMirror resolverClassMirror = (TypeMirror) resolverValue.getValue();
             ClassNameResolver resolver = getClassNameResolver(resolverClassMirror);
             if(isAbstract(generateClassAnnotation, definition)) {

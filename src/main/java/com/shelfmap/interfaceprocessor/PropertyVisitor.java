@@ -130,7 +130,7 @@ public class PropertyVisitor extends ElementScanner6<Void, Environment> {
         }
     }
 
-    private Property buildPropertyFromExecutableElement(ExecutableElement ee, Environment env) {
+    protected Property buildPropertyFromExecutableElement(ExecutableElement ee, Environment env) {
         ProcessingEnvironment p = env.getProcessingEnvironment();
         int level = env.getLevel();
         String name = ee.getSimpleName().toString();
