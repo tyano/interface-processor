@@ -245,6 +245,11 @@ public class InterfaceProcessor extends AbstractProcessor {
         return !getSuperClassValue(elementUtils.getElementValuesWithDefaults(annotation)).isEmpty();
     }
 
+    protected final boolean isHavingSuperClassName(AnnotationMirror annotation) {
+        Elements elementUtils = processingEnv.getElementUtils();
+        return !getSuperClassValue(elementUtils.getElementValuesWithDefaults(annotation)).isEmpty();
+    }
+
     protected final boolean isPropertyChangeEventAware(TypeElement element) {
         Elements elementUtils = processingEnv.getElementUtils();
         Types typeUtils = processingEnv.getTypeUtils();
@@ -736,13 +741,19 @@ public class InterfaceProcessor extends AbstractProcessor {
         TypeMirror superClassMirror = (TypeMirror) superClassValue.getValue();
         TypeMirror voidType = elementUtils.getTypeElement(Void.class.getName()).asType();
 
+        //if the value of superClass() is Void.class, then we use the value of superClassName().
         if(typeUtils.isSameType(voidType, superClassMirror)) {
-            return "";
+            return getSuperClassNameValue(elementValues);
+        } else {
+            return superClassMirror.toString();
         }
-
-        return superClassMirror.toString();
     }
 
+    protected final String getSuperClassNameValue(Map<? extends ExecutableElement, ? extends AnnotationValue> elementValues) {
+        AnnotationValue superClassValue = getValueOfAnnotation(elementValues, "superClassName");
+        assert superClassValue != null;
+        return (String) superClassValue.getValue();
+    }
 
     protected final AnnotationValue getValueOfAnnotation(Map<? extends ExecutableElement, ? extends AnnotationValue> elementValues, String keyName) {
         for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry : elementValues.entrySet()) {
