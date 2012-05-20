@@ -76,7 +76,7 @@ public class InterfaceProcessor extends AbstractProcessor {
 
                 AnnotationMirror generateClassAnnotation = findAnnotation(element, GenerateClass.class, elementUtils, typeUtils);
                 String packageName = resolvePackageName(generateClassAnnotation, definition);
-                String className = resolveImplementationClassName(generateAnnotation, definition);
+                String className = resolveImplementationClassName(generateAnnotation, generateClassAnnotation, definition);
                 String fullClassName = packageName + "." + className;
 
                 if(!precheck(definition, generateClassAnnotation, className, element)) {
@@ -835,22 +835,47 @@ public class InterfaceProcessor extends AbstractProcessor {
         }
     }
 
-    protected String resolveImplementationClassName(GenerateClass annotation, InterfaceDefinition definition) {
+    protected ClassNameResolver getDefaultImplementationOfClassNameResolver() {
+        return new DefaultClassNameResolver();
+    }
+
+    protected ClassNameResolver getClassNameResolver(TypeMirror resolverClassMirror) {
+        Elements elementUtils = processingEnv.getElementUtils();
+        Types typeUtils = processingEnv.getTypeUtils();
+
+        TypeMirror autoResolveClassNameResolverType = elementUtils.getTypeElement(AutoResolveClassNameResolver.class.getName()).asType();
+        TypeMirror defaultClassNameResolverType = elementUtils.getTypeElement(DefaultClassNameResolver.class.getName()).asType();
+        TypeMirror removePrefixResolverType = elementUtils.getTypeElement(RemovePrefixClassNameResolver.class.getName()).asType();
+
+        if(typeUtils.isSameType(resolverClassMirror, autoResolveClassNameResolverType)) {
+            return getDefaultImplementationOfClassNameResolver();
+        } else if(typeUtils.isSameType(resolverClassMirror, defaultClassNameResolverType)) {
+            return new DefaultClassNameResolver();
+        } else if(typeUtils.isSameType(resolverClassMirror, removePrefixResolverType)) {
+            return new RemovePrefixClassNameResolver();
+        } else {
+            throw new IllegalStateException("Unknown ClassNameResolver: " + resolverClassMirror.toString());
+        }
+    }
+
+    protected String resolveImplementationClassName(GenerateClass annotation, AnnotationMirror generateClassAnnotation, InterfaceDefinition definition) {
+        Elements elementUtils = processingEnv.getElementUtils();
+
         String interfaceName = definition.getInterfaceName();
         String className = annotation.className();
         if(className.isEmpty()) {
+            AnnotationValue resolverValue = getValueOfAnnotation(elementUtils.getElementValuesWithDefaults(generateClassAnnotation), "classNameResolver");
+            assert resolverValue != null;
+            
+            TypeMirror resolverClassMirror = (TypeMirror) resolverValue.getValue();
+            ClassNameResolver resolver = getClassNameResolver(resolverClassMirror);
             if(definition.getMethods().isEmpty() && !definition.isHavingIgnoredProperty()) {
-                return getClassNamePrefix() + capitalize(interfaceName) + getClassNameSuffix();
+                return resolver.classNameFor(interfaceName);
             } else {
-                return getAbstractClassNamePrefix() + capitalize(interfaceName) + getAbstractClassNameSuffix();
+                return resolver.abstractClassNameFor(interfaceName);
             }
         } else {
             return className;
         }
     }
-
-    protected String getClassNamePrefix() { return "Default"; }
-    protected String getClassNameSuffix() { return ""; }
-    protected String getAbstractClassNamePrefix() { return "Abstract"; }
-    protected String getAbstractClassNameSuffix() { return getClassNameSuffix(); }
 }
