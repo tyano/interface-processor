@@ -49,6 +49,16 @@ import javax.lang.model.util.Types;
 public class InterfaceProcessor extends AbstractProcessor {
 
     private static final String INSTANCE_LOCK = "instanceLock";
+    private static final String IS_PACKAGE_NAME_RELATIVE = "isPackageNameRelative";
+    private static final String PACKAGE_NAME = "packageName";
+    private static final String IS_THREAD_SAFE = "isThreadSafe";
+    private static final String IS_CLONEABLE = "isCloneable";
+    private static final String IS_SERIALIZABLE = "isSerializable";
+    private static final String IS_ABSTRACT = "isAbstract";
+    private static final String SERIAL_VERSION = "serialVersion";
+    private static final String IS_SUPERCLASS_CLONEABLE = "isSuperClassCloneable";
+    private static final String SUPERCLASS = "superClass";
+    private static final String SUPERCLASS_NAME = "superClassName";
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment re) {
@@ -102,7 +112,7 @@ public class InterfaceProcessor extends AbstractProcessor {
                     shift = generateToString(writer, shift, generateClassAnnotation, definition, className, isHavingSuperClass, targetInterface);
 
                     if(isCloneable(generateClassAnnotation)) {
-                        shift = generateClone(writer, shift, definition, className);
+                        shift = generateClone(writer, shift, generateClassAnnotation, definition, className);
                     }
 
                     if(isPropertyChangeEventAware(targetInterface)) {
@@ -205,49 +215,59 @@ public class InterfaceProcessor extends AbstractProcessor {
         return shift;
     }
 
+    protected final boolean isSuperClassCloneable(AnnotationMirror annotation) {
+        boolean havingSuperClass = isHavingSuperClass(annotation);
+
+        Elements elementUtils = processingEnv.getElementUtils();
+        Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
+        AnnotationValue packageNameRelativeValue = getValueOfAnnotation(annotationValueMap, IS_SUPERCLASS_CLONEABLE);
+        return havingSuperClass && ((Boolean)packageNameRelativeValue.getValue()).booleanValue();
+    }
+
     protected final boolean isPackageNameRelative(AnnotationMirror annotation) {
         Elements elementUtils = processingEnv.getElementUtils();
         Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
-        AnnotationValue packageNameRelativeValue = getValueOfAnnotation(annotationValueMap, "packageNameRelative");
+        AnnotationValue packageNameRelativeValue = getValueOfAnnotation(annotationValueMap, IS_PACKAGE_NAME_RELATIVE);
         return ((Boolean)packageNameRelativeValue.getValue()).booleanValue();
     }
 
     protected final String getPackageName(AnnotationMirror annotation) {
         Elements elementUtils = processingEnv.getElementUtils();
         Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
-        AnnotationValue packageNameValue = getValueOfAnnotation(annotationValueMap, "packageName");
+        AnnotationValue packageNameValue = getValueOfAnnotation(annotationValueMap, PACKAGE_NAME);
         return (String)packageNameValue.getValue();
     }
 
     protected final boolean isThreadSafe(AnnotationMirror annotation) {
         Elements elementUtils = processingEnv.getElementUtils();
         Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
-        AnnotationValue threadSafeValue = getValueOfAnnotation(annotationValueMap, "threadSafe");
+        AnnotationValue threadSafeValue = getValueOfAnnotation(annotationValueMap, IS_THREAD_SAFE);
         return ((Boolean)threadSafeValue.getValue()).booleanValue();
     }
 
     protected final boolean isCloneable(AnnotationMirror annotation) {
         Elements elementUtils = processingEnv.getElementUtils();
         Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
-        AnnotationValue cloneableValue = getValueOfAnnotation(annotationValueMap, "cloneable");
+        AnnotationValue cloneableValue = getValueOfAnnotation(annotationValueMap, IS_CLONEABLE);
         return ((Boolean)cloneableValue.getValue()).booleanValue();
     }
 
     protected final boolean isSerializable(AnnotationMirror annotation) {
         Elements elementUtils = processingEnv.getElementUtils();
         Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
-        AnnotationValue serializableValue = getValueOfAnnotation(annotationValueMap, "serializable");
+        AnnotationValue serializableValue = getValueOfAnnotation(annotationValueMap, IS_SERIALIZABLE);
         return ((Boolean)serializableValue.getValue()).booleanValue();
     }
 
     protected final boolean isHavingSuperClass(AnnotationMirror annotation) {
         Elements elementUtils = processingEnv.getElementUtils();
-        return !getSuperClassValue(elementUtils.getElementValuesWithDefaults(annotation)).isEmpty();
+        boolean havingSuperClass = !getSuperClassValue(elementUtils.getElementValuesWithDefaults(annotation)).isEmpty();
+        return havingSuperClass || isHavingSuperClassName(annotation);
     }
 
     protected final boolean isHavingSuperClassName(AnnotationMirror annotation) {
         Elements elementUtils = processingEnv.getElementUtils();
-        return !getSuperClassValue(elementUtils.getElementValuesWithDefaults(annotation)).isEmpty();
+        return !getSuperClassNameValue(elementUtils.getElementValuesWithDefaults(annotation)).isEmpty();
     }
 
     protected final boolean isPropertyChangeEventAware(TypeElement element) {
@@ -262,8 +282,18 @@ public class InterfaceProcessor extends AbstractProcessor {
         return false;
     }
 
-    protected final boolean isAbstract(InterfaceDefinition definition) {
-        return definition.getMethods().isEmpty() && !definition.isHavingIgnoredProperty();
+    protected final boolean isAbstract(AnnotationMirror annotation, InterfaceDefinition definition) {
+        Elements elementUtils = processingEnv.getElementUtils();
+        Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
+        AnnotationValue isAbstractAttribute = getValueOfAnnotation(annotationValueMap, IS_ABSTRACT);
+        assert isAbstractAttribute != null;
+
+        Object isAbstractValue = isAbstractAttribute.getValue();
+        assert isAbstractValue != null;
+
+        boolean isAbstract = (isAbstractValue instanceof Boolean) && ((Boolean)isAbstractValue).booleanValue();
+
+        return isAbstract || !(definition.getMethods().isEmpty() && !definition.isHavingIgnoredProperty());
     }
 
     protected boolean precheck(InterfaceDefinition definition, AnnotationMirror annotation, String className, Element element) {
@@ -278,7 +308,7 @@ public class InterfaceProcessor extends AbstractProcessor {
 
         writer.append("package ").append(packageName).append(";\n\n");
         writer.append("@javax.annotation.Generated(value = \"" + this.getClass().getName() + "\", date = \"" + generationTime + "\")\n");
-        writer.append("public ").append(isAbstract(definition) ? "" : "abstract ").append("class ").append(className);
+        writer.append("public ").append(isAbstract(annotation, definition) ? "abstract " : "").append("class ").append(className);
 
         Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
         String superClassName = getSuperClassValue(annotationValueMap);
@@ -295,7 +325,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         writer.append(" {\n");
 
         if(isSerializable) {
-            AnnotationValue serialVersionValue = getValueOfAnnotation(annotationValueMap, "serialVersion");
+            AnnotationValue serialVersionValue = getValueOfAnnotation(annotationValueMap, SERIAL_VERSION);
             Long version = (Long)serialVersionValue.getValue();
             writer.append(indent(1)).append("private static final long serialVersionUID = ").append(version.toString()).append("L;\n");
         }
@@ -640,15 +670,25 @@ public class InterfaceProcessor extends AbstractProcessor {
         return shift;
     }
 
-    protected int generateClone(Writer writer, int shift, InterfaceDefinition definition, String className) throws IOException {
+    protected int generateClone(Writer writer, int shift, AnnotationMirror annotation, InterfaceDefinition definition, String className) throws IOException {
+        Elements elementUtils = processingEnv.getElementUtils();
+
+        Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
+
         writer.append(indent(shift)).append("@Override\n")
-              .append(indent(shift)).append("public ").append(className).append(" clone() {\n")
-              .append(indent(++shift)).append("try {\n")
-              .append(indent(++shift)).append("return (").append(className).append(") super.clone();\n")
-              .append(indent(--shift)).append("} catch(CloneNotSupportedException ex) {\n")
-              .append(indent(++shift)).append("throw new IllegalStateException(ex);\n")
-              .append(indent(--shift)).append("}\n")
-              .append(indent(--shift)).append("}\n\n");
+              .append(indent(shift)).append("public ").append(className).append(" clone() {\n");
+
+        if(isSuperClassCloneable(annotation)) {
+            writer.append(indent(++shift)).append("return (").append(className).append(") super.clone();\n");
+        } else {
+            writer.append(indent(++shift)).append("try {\n")
+                  .append(indent(++shift)).append("return (").append(className).append(") super.clone();\n")
+                  .append(indent(--shift)).append("} catch(CloneNotSupportedException ex) {\n")
+                  .append(indent(++shift)).append("throw new IllegalStateException(ex);\n")
+                  .append(indent(--shift)).append("}\n");
+        }
+        
+        writer.append(indent(--shift)).append("}\n\n");
         return shift;
     }
 
@@ -736,7 +776,7 @@ public class InterfaceProcessor extends AbstractProcessor {
     protected final String getSuperClassValue(Map<? extends ExecutableElement, ? extends AnnotationValue> elementValues) {
         Elements elementUtils = processingEnv.getElementUtils();
         Types typeUtils = processingEnv.getTypeUtils();
-        AnnotationValue superClassValue = getValueOfAnnotation(elementValues, "superClass");
+        AnnotationValue superClassValue = getValueOfAnnotation(elementValues, SUPERCLASS);
         assert superClassValue != null;
         TypeMirror superClassMirror = (TypeMirror) superClassValue.getValue();
         TypeMirror voidType = elementUtils.getTypeElement(Void.class.getName()).asType();
@@ -750,7 +790,7 @@ public class InterfaceProcessor extends AbstractProcessor {
     }
 
     protected final String getSuperClassNameValue(Map<? extends ExecutableElement, ? extends AnnotationValue> elementValues) {
-        AnnotationValue superClassValue = getValueOfAnnotation(elementValues, "superClassName");
+        AnnotationValue superClassValue = getValueOfAnnotation(elementValues, SUPERCLASS_NAME);
         assert superClassValue != null;
         return (String) superClassValue.getValue();
     }
@@ -869,10 +909,10 @@ public class InterfaceProcessor extends AbstractProcessor {
             
             TypeMirror resolverClassMirror = (TypeMirror) resolverValue.getValue();
             ClassNameResolver resolver = getClassNameResolver(resolverClassMirror);
-            if(definition.getMethods().isEmpty() && !definition.isHavingIgnoredProperty()) {
-                return resolver.classNameFor(interfaceName);
-            } else {
+            if(isAbstract(generateClassAnnotation, definition)) {
                 return resolver.abstractClassNameFor(interfaceName);
+            } else {
+                return resolver.classNameFor(interfaceName);
             }
         } else {
             return className;

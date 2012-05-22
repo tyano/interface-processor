@@ -16,7 +16,6 @@
 package com.shelfmap.interfaceprocessor.annotation;
 
 import com.shelfmap.interfaceprocessor.AutoResolveClassNameResolver;
-import com.shelfmap.interfaceprocessor.DefaultClassNameResolver;
 import com.shelfmap.interfaceprocessor.FieldModifier;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -31,15 +30,17 @@ import java.lang.annotation.Target;
 @Target(ElementType.TYPE)
 public @interface GenerateClass {
     boolean autoGenerate() default true;
-    boolean threadSafe() default true;
+    boolean isAbstract() default false;
+    boolean isThreadSafe() default true;
     String packageName() default "";
-    boolean packageNameRelative() default false;
+    boolean isPackageNameRelative() default false;
     String className() default "";
     Class<?> superClass() default Void.class;
     String superClassName() default "";
-    boolean serializable() default true;
+    boolean isSerializable() default true;
     long serialVersion() default 1L;
-    boolean cloneable() default true;
+    boolean isCloneable() default true;
     FieldModifier fieldModifier() default FieldModifier.PRIVATE;
     Class<?> classNameResolver() default AutoResolveClassNameResolver.class;
+    boolean isSuperClassCloneable() default false;
 }
