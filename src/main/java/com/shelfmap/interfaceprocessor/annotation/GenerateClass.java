@@ -43,4 +43,5 @@ public @interface GenerateClass {
     FieldModifier fieldModifier() default FieldModifier.PRIVATE;
     Class<?> classNameResolver() default AutoResolveClassNameResolver.class;
     boolean isSuperClassCloneable() default false;
+    boolean ignoreSuperInterface() default false;
 }

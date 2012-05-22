@@ -79,7 +79,7 @@ public class InterfaceProcessor extends AbstractProcessor {
 
                 InterfaceDefinition definition = new DefaultInterfaceDefinition();
                 Environment visitorEnvironment = new BuildingEnvironment(processingEnv, definition);
-                PropertyVisitor visitor = new PropertyVisitor(createInterfaceFilter());
+                PropertyVisitor visitor = new PropertyVisitor(createInterfaceFilter(generateAnnotation.ignoreSuperInterface()));
 
                 //collect information about the current interface into visitorEnviroment
                 visitor.visit(targetInterface, visitorEnvironment);
@@ -134,10 +134,12 @@ public class InterfaceProcessor extends AbstractProcessor {
         return processed;
     }
 
-    protected InterfaceFilter createInterfaceFilter() {
+    protected InterfaceFilter createInterfaceFilter(boolean ignoreSuperInterfaces) {
         Elements elementUtils = processingEnv.getElementUtils();
         Types typeUtils = processingEnv.getTypeUtils();
-        return new DefaultInterfaceFilter(elementUtils, typeUtils);
+        return ignoreSuperInterfaces 
+                ? new IgnoreSuperInterfaceFilter(elementUtils, typeUtils)
+                : new DefaultInterfaceFilter(elementUtils, typeUtils);
     }
 
     protected int generateField(Property property, Writer writer, final int shift, FieldModifier modifier) throws IOException {
