@@ -639,7 +639,7 @@ public class InterfaceProcessor extends AbstractProcessor {
                   .append(indent(shift++)).append("try {\n");
         }
 
-        writer.append(indent(shift)).append("return \"").append(className).append("{\"\n");
+        writer.append(indent(shift)).append("return getClass().getSimpleName()").append(" + \"{\"\n");
 
         shift++;
         boolean isFirst = true;
