@@ -314,6 +314,11 @@ public class InterfaceProcessor extends AbstractProcessor {
         if(isSerializable) {
             writer.append(", java.io.Serializable");
         }
+
+        if(isCloneable(annotation)) {
+            writer.append(", java.lang.Cloneable");
+        }
+
         writer.append(" {\n");
 
         if(isSerializable) {
