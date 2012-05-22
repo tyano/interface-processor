@@ -42,7 +42,5 @@ public @interface GenerateClass {
     boolean isCloneable() default true;
     FieldModifier fieldModifier() default FieldModifier.PRIVATE;
     Class<?> classNameResolver() default AutoResolveClassNameResolver.class;
-    boolean isSuperClassCloneable() default false;
-    boolean isSuperClassThreadSafe() default false;
     boolean ignoreSuperInterface() default false;
 }

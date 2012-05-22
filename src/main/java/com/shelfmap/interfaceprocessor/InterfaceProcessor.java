@@ -56,8 +56,6 @@ public class InterfaceProcessor extends AbstractProcessor {
     private static final String IS_SERIALIZABLE = "isSerializable";
     private static final String IS_ABSTRACT = "isAbstract";
     private static final String SERIAL_VERSION = "serialVersion";
-    private static final String IS_SUPERCLASS_CLONEABLE = "isSuperClassCloneable";
-    private static final String IS_SUPERCLASS_THREADSAFE = "isSuperClassThreadSafe";
     private static final String SUPERCLASS = "superClass";
     private static final String SUPERCLASS_NAME = "superClassName";
 
@@ -218,15 +216,6 @@ public class InterfaceProcessor extends AbstractProcessor {
         return shift;
     }
 
-    protected final boolean isSuperClassCloneable(AnnotationMirror annotation) {
-        boolean havingSuperClass = isHavingSuperClass(annotation);
-
-        Elements elementUtils = processingEnv.getElementUtils();
-        Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
-        AnnotationValue packageNameRelativeValue = getValueOfAnnotation(annotationValueMap, IS_SUPERCLASS_CLONEABLE);
-        return havingSuperClass && ((Boolean)packageNameRelativeValue.getValue()).booleanValue();
-    }
-
     protected final boolean isPackageNameRelative(AnnotationMirror annotation) {
         Elements elementUtils = processingEnv.getElementUtils();
         Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
@@ -246,15 +235,6 @@ public class InterfaceProcessor extends AbstractProcessor {
         Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
         AnnotationValue threadSafeValue = getValueOfAnnotation(annotationValueMap, IS_THREAD_SAFE);
         return ((Boolean)threadSafeValue.getValue()).booleanValue();
-    }
-
-    protected final boolean isSuperClassThreadSafe(AnnotationMirror annotation) {
-        boolean havingSuperClass = isHavingSuperClass(annotation);
-
-        Elements elementUtils = processingEnv.getElementUtils();
-        Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
-        AnnotationValue packageNameRelativeValue = getValueOfAnnotation(annotationValueMap, IS_SUPERCLASS_THREADSAFE);
-        return havingSuperClass && ((Boolean)packageNameRelativeValue.getValue()).booleanValue();
     }
 
     protected final boolean isCloneable(AnnotationMirror annotation) {
@@ -358,7 +338,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         }
 
 
-        if(isThreadSafe(annotation) && !isSuperClassThreadSafe(annotation)) {
+        if(isThreadSafe(annotation) && !isHavingSuperClass(annotation)) {
             writer.append("\n");
             writer.append(indent(shift)).append("protected final java.util.concurrent.locks.ReadWriteLock ").append(INSTANCE_LOCK).append(" = new java.util.concurrent.locks.ReentrantReadWriteLock();\n");
         }
@@ -690,7 +670,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         writer.append(indent(shift)).append("@Override\n")
               .append(indent(shift)).append("public ").append(className).append(" clone() {\n");
 
-        if(isSuperClassCloneable(annotation)) {
+        if(isHavingSuperClass(annotation)) {
             writer.append(indent(++shift)).append("return (").append(className).append(") super.clone();\n");
         } else {
             writer.append(indent(++shift)).append("try {\n")
