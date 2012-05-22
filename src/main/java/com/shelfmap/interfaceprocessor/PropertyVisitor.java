@@ -50,8 +50,6 @@ public class PropertyVisitor extends ElementScanner6<Void, Environment> {
 
     /**
      * {@inheritDoc }
-     *
-     * we here output the line of class-definition of this interface.
      */
     @Override
     public Void visitType(TypeElement element, Environment env) {
@@ -100,15 +98,15 @@ public class PropertyVisitor extends ElementScanner6<Void, Environment> {
 
         InterfaceDefinition definition = env.getInterfaceDefinition();
 
-        Property property = buildPropertyFromExecutableElement(ee, env.getProcessingEnvironment());
+        Property property = buildPropertyFromExecutableElement(ee, env);
         Types typeUtils = env.getProcessingEnvironment().getTypeUtils();
 
-        //if the building of property object is succeed, the ee is a variation of a property (readable or writable)
+        //if the creation of a property object success, now the ee is a variation of a property (readable or writable)
         if(property != null) {
             Property prev = definition.findProperty(property.getName(), property.getType(), typeUtils);
 
             //if a property having same name and same type is already added to InterfaceDifinition,
-            //we merge their readable and writable attribute into the previously added object.
+            //we merge their readable and writable attributes into the previously added object.
             if(prev != null) {
                 mergeProperty(prev, property);
             } else {
@@ -132,26 +130,30 @@ public class PropertyVisitor extends ElementScanner6<Void, Environment> {
         }
     }
 
-    private Property buildPropertyFromExecutableElement(ExecutableElement ee, ProcessingEnvironment p) {
+    private Property buildPropertyFromExecutableElement(ExecutableElement ee, Environment env) {
+        ProcessingEnvironment p = env.getProcessingEnvironment();
+        int level = env.getLevel();
         String name = ee.getSimpleName().toString();
 
         Types typeUtil = p.getTypeUtils();
         Elements elementUtil = p.getElementUtils();
 
+        boolean isDefined = level == 0;
+
         Property property = null;
         if(name.startsWith("get") || name.startsWith("set") || name.startsWith("is")) {
             if(name.startsWith("get")) {
-                property = new DefaultProperty(uncapitalize(name.substring(3)), ee.getReturnType(), ee, null);
+                property = new DefaultProperty(uncapitalize(name.substring(3)), ee.getReturnType(), isDefined, ee, null);
             } else if(name.startsWith("set")) {
                 if(ee.getParameters().size() == 1) {
-                    property = new DefaultProperty(uncapitalize(name.substring(3)), ee.getParameters().get(0).asType(), null, ee);
+                    property = new DefaultProperty(uncapitalize(name.substring(3)), ee.getParameters().get(0).asType(), isDefined, null, ee);
                 }
             } else if(name.startsWith("is")) {
                 PrimitiveType bool = typeUtil.getPrimitiveType(TypeKind.BOOLEAN);
                 if(typeUtil.isSameType(ee.getReturnType(), bool) ||
                    typeUtil.isSameType(ee.getReturnType(), typeUtil.boxedClass(bool).asType())) {
 
-                    property =  new DefaultProperty(uncapitalize(name.substring(2)), ee.getReturnType(), ee, null);
+                    property =  new DefaultProperty(uncapitalize(name.substring(2)), ee.getReturnType(), isDefined, ee, null);
                 }
             }
 

@@ -25,6 +25,7 @@ import javax.lang.model.type.TypeMirror;
  */
 public class DefaultProperty implements Property {
 
+    private boolean defined;
     private boolean writable;
     private boolean readable;
     private final String name;
@@ -35,9 +36,10 @@ public class DefaultProperty implements Property {
     private ExecutableElement reader;
     private ExecutableElement writer;
 
-    public DefaultProperty(String name, TypeMirror type, ExecutableElement reader, ExecutableElement writer) {
+    public DefaultProperty(String name, TypeMirror type, boolean defined, ExecutableElement reader, ExecutableElement writer) {
         this.name = name;
         this.type = type;
+        this.defined = defined;
         this.readable = (reader != null);
         this.writable = (writer != null);
         this.reader = reader;
@@ -52,6 +54,11 @@ public class DefaultProperty implements Property {
     @Override
     public boolean isWritable() {
         return writable;
+    }
+
+    @Override
+    public boolean isDefined() {
+        return defined;
     }
 
     @Override

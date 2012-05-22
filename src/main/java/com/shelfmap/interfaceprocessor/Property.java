@@ -23,6 +23,7 @@ import javax.lang.model.type.TypeMirror;
  * @author Tsutomu YANO
  */
 public interface Property {
+    boolean isDefined();
     boolean isReadable();
     boolean isWritable();
 
