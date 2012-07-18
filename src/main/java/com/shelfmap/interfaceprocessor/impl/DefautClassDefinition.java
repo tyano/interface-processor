@@ -15,7 +15,9 @@
  */
 package com.shelfmap.interfaceprocessor.impl;
 
-import com.shelfmap.interfaceprocessor.InterfaceDefinition;
+import com.shelfmap.interfaceprocessor.ClassDefinition;
+import com.shelfmap.interfaceprocessor.ElementType;
+import com.shelfmap.interfaceprocessor.Field;
 import com.shelfmap.interfaceprocessor.Property;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -30,17 +32,29 @@ import javax.lang.model.util.Types;
  *
  * @author Tsutomu YANO
  */
-public class DefaultInterfaceDefinition implements InterfaceDefinition {
+public class DefautClassDefinition implements ClassDefinition {
+    private ElementType elementType;
     private String pkg;
     private String interfaceName;
+    private final List<Field> fields = new ArrayList<Field>();
     private final List<Property> properties = new ArrayList<Property>();
     private final List<ExecutableElement> methods = new ArrayList<ExecutableElement>();
     private final List<TypeParameterElement> typeParameters = new ArrayList<TypeParameterElement>();
 
-    public DefaultInterfaceDefinition() {
+    public DefautClassDefinition() {
         super();
     }
 
+    @Override
+    public ElementType getElementType() {
+        return elementType;
+    }
+
+    @Override
+    public void setElementType(ElementType elementType) {
+        this.elementType = elementType;
+    }
+    
     @Override
     public String getPackage() {
         return pkg;
@@ -52,13 +66,43 @@ public class DefaultInterfaceDefinition implements InterfaceDefinition {
     }
 
     @Override
-    public String getInterfaceName() {
+    public String getClassName() {
         return this.interfaceName;
     }
 
     @Override
-    public void setInterfaceName(String interfaceName) {
+    public void setClassName(String interfaceName) {
         this.interfaceName = interfaceName;
+    }
+
+    @Override
+    public Collection<Field> getFields() {
+        return new ArrayList<Field>(this.fields);
+    }
+
+    @Override
+    public void addFields(Types typeUtil, Field... fields) {
+        if(fields == null) return;
+        this.fields.addAll(Arrays.asList(fields));
+        
+        for (Field field : fields) {
+            Property prop = findProperty(field.getName(), field.getType(), typeUtil);
+            if(prop != null) {
+                System.out.println("name = " + field.getName());
+                prop.setFieldDefined(true);
+                field.setPropertyDefined(true);
+            }
+        }
+    }
+
+    @Override
+    public Field findField(String name, TypeMirror type, Types typeUtil) {
+        for (Field field : this.fields) {
+            if(field.getName().equals(name) && typeUtil.isSameType(field.getType(), type)) {
+                return field;
+            }
+        }
+        return null;
     }
 
     @Override
@@ -67,19 +111,39 @@ public class DefaultInterfaceDefinition implements InterfaceDefinition {
     }
 
     @Override
-    public void addProperties(Property... props) {
+    public void addProperties(Types typeUtil, Property... props) {
         if(props == null) return;
         this.properties.addAll(Arrays.asList(props));
+        
+        for (Property prop : props) {
+            Field field = findField(prop.getName(), prop.getType(), typeUtil);
+            if(field != null) {
+                prop.setFieldDefined(true);
+                field.setPropertyDefined(true);
+            }
+        }
     }
 
     @Override
-    public Property findProperty(String name, TypeMirror type, Types types) {
+    public Property findProperty(String name, TypeMirror type, Types typeUtil) {
         for (Property prop : properties) {
-            if(prop.getName().equals(name) && types.isSameType(prop.getType(), type)) {
+            if(prop.getName().equals(name) && typeUtil.isSameType(prop.getType(), type)) {
                 return prop;
             }
         }
         return null;
+    }
+    
+    @Override
+    public Collection<Field> getInnerFields(Types typeUtil) {
+        List<Field> innerFields = new ArrayList<Field>();
+        for (Field field : fields) {
+            Property prop = findProperty(field.getName(), field.getType(), typeUtil);
+            if(prop == null) {
+                innerFields.add(field);
+            }
+        }
+        return innerFields;
     }
 
     @Override

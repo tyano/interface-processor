@@ -17,7 +17,7 @@ package com.shelfmap.interfaceprocessor;
 
 import com.shelfmap.interfaceprocessor.annotation.GenerateClass;
 import com.shelfmap.interfaceprocessor.impl.BuildingEnvironment;
-import com.shelfmap.interfaceprocessor.impl.DefaultInterfaceDefinition;
+import com.shelfmap.interfaceprocessor.impl.DefautClassDefinition;
 import com.shelfmap.interfaceprocessor.impl.DefaultInterfaceFilter;
 import com.shelfmap.interfaceprocessor.util.IO;
 import com.shelfmap.interfaceprocessor.util.Objects;
@@ -69,14 +69,14 @@ public class InterfaceProcessor extends AbstractProcessor {
         boolean processed = false;
         Set<? extends Element> elements = re.getElementsAnnotatedWith(GenerateClass.class);
         for (Element element : elements) {
-            if(element.getKind() == ElementKind.INTERFACE) {
+            if(element.getKind() == ElementKind.INTERFACE || isAbstractClass(element)) {
                 TypeElement targetInterface = (TypeElement)element;
                 GenerateClass generateAnnotation = targetInterface.getAnnotation(GenerateClass.class);
                 assert generateAnnotation != null;
 
                 if(!generateAnnotation.autoGenerate()) continue;
 
-                InterfaceDefinition definition = new DefaultInterfaceDefinition();
+                ClassDefinition definition = new DefautClassDefinition();
                 Environment visitorEnvironment = new BuildingEnvironment(processingEnv, definition);
                 ElementVisitor<Void, Environment> visitor = createVisitor(createInterfaceFilter(generateAnnotation.ignoreSuperInterface()));
 
@@ -101,7 +101,7 @@ public class InterfaceProcessor extends AbstractProcessor {
                     generateClassDefinition(writer, generateClassAnnotation, definition, className, targetInterface);
 
                     boolean isHavingSuperClass = isHavingSuperClass(generateClassAnnotation);
-                    FieldModifier modifier = generateAnnotation.fieldModifier();
+                    Modifier modifier = generateAnnotation.fieldModifier();
                     int shift = 1;
                     shift = generateFields(writer, shift, generateClassAnnotation, definition, targetInterface, modifier);
                     shift = generateConstructors(writer, shift, generateClassAnnotation, definition, className, targetInterface);
@@ -132,6 +132,14 @@ public class InterfaceProcessor extends AbstractProcessor {
         }
         return processed;
     }
+    
+    protected final boolean isAbstractClass(Element element) {
+        if(element.getKind() == ElementKind.CLASS) {
+            Set<javax.lang.model.element.Modifier> modifiers = element.getModifiers();
+            return modifiers.contains(javax.lang.model.element.Modifier.ABSTRACT);
+        }
+        return false;
+    }
 
     protected ElementVisitor<Void, Environment> createVisitor(InterfaceFilter filter) {
         return new PropertyVisitor(filter);
@@ -145,24 +153,26 @@ public class InterfaceProcessor extends AbstractProcessor {
                 : new DefaultInterfaceFilter(elementUtils, typeUtils);
     }
 
-    protected int generateField(Property property, Writer writer, final int shift, FieldModifier modifier) throws IOException {
+    protected int generateField(Property property, Writer writer, final int shift, Modifier modifier) throws IOException {
         String typeName = property.getType().toString();
-        writer.append(indent(shift)).append(modifier.getModifier()).append((modifier == FieldModifier.DEFAULT ? "" : " ")).append(typeName).append(" ").append(toSafeName(property.getName())).append(";\n");
+        writer.append(indent(shift)).append(modifier.getModifier()).append((modifier == Modifier.DEFAULT ? "" : " ")).append(typeName).append(" ").append(toSafeName(property.getName())).append(";\n");
         return shift;
     }
 
-    protected int generateGetter(Writer writer, int shift, TypeElement element, AnnotationMirror generateClassAnnotation, Property property) throws IOException {
+    protected int generateGetter(Writer writer, int shift, TypeElement element, AnnotationMirror generateClassAnnotation, Attribute attribute, ClassDefinition definition, Modifier modifier) throws IOException {
         Types typeUtils = processingEnv.getTypeUtils();
-        String propertyType = property.getType().toString();
+        String propertyType = attribute.getType().toString();
         boolean threadSafe = isThreadSafe(generateClassAnnotation);
 
-        writer.append(indent(shift)).append("@Override\n")
-              .append(indent(shift)).append("public ").append(propertyType).append(isBoolean(property.getType(), typeUtils) ? " is" : " get").append(capitalize(property.getName())).append("() {\n");
+        if(definition.getElementType() == ElementType.INTERFACE) {
+            writer.append(indent(shift)).append("@Override\n");
+        }
+        writer.append(indent(shift)).append(modifier.getModifier()).append(" ").append(propertyType).append(isBoolean(attribute.getType(), typeUtils) ? " is" : " get").append(capitalize(attribute.getName())).append("() {\n");
         if(threadSafe) {
             writer.append(indent(++shift)).append(INSTANCE_LOCK).append(".readLock().lock();\n")
                   .append(indent(shift)).append("try {\n");
         }
-        writer.append(indent(++shift)).append("return ").append(retain(property, "this.")).append(";\n");
+        writer.append(indent(++shift)).append("return ").append(retain(attribute, "this.")).append(";\n");
         if(threadSafe) {
             writer.append(indent(--shift)).append("} finally {\n")
                   .append(indent(++shift)).append(INSTANCE_LOCK).append(".readLock().unlock();\n")
@@ -172,16 +182,20 @@ public class InterfaceProcessor extends AbstractProcessor {
         return shift;
     }
 
-    protected int generateSetter(Writer writer, int shift, TypeElement element, AnnotationMirror generateClassAnnotation, Property property) throws IOException {
+    protected int generateSetter(Writer writer, int shift, TypeElement element, AnnotationMirror generateClassAnnotation, Attribute attribute, ClassDefinition definition, Modifier modifier) throws IOException {
         boolean threadSafe = isThreadSafe(generateClassAnnotation);
-        String fieldName = toSafeName(property.getName());
-        String propertyType = property.getType().toString();
+        String fieldName = toSafeName(attribute.getName());
+        String propertyType = attribute.getType().toString();
 
         boolean propertySupport = isPropertyChangeEventAware(element);
-        writer.append(indent(shift)).append("@Override\n");
-        writer.append(indent(shift++)).append("public void set").append(capitalize(property.getName())).append("(").append(propertyType).append(" ").append(fieldName).append(") {\n");
-        boolean isPrimitive = isPrimitive(property.getType());
-        String valueType = property.getType().toString();
+        
+        if(definition.getElementType() == ElementType.INTERFACE) {
+            writer.append(indent(shift)).append("@Override\n");
+        }
+        
+        writer.append(indent(shift++)).append(modifier.getModifier()).append(" void set").append(capitalize(attribute.getName())).append("(").append(propertyType).append(" ").append(fieldName).append(") {\n");
+        boolean isPrimitive = isPrimitive(attribute.getType());
+        String valueType = attribute.getType().toString();
         if(propertySupport) {
             writer.append(indent(shift)).append(valueType).append(" newValue").append(isPrimitive ? "" : " = null").append(";\n");
             writer.append(indent(shift)).append(valueType).append(" oldValue").append(isPrimitive ? "" : " = null").append(";\n");
@@ -192,15 +206,15 @@ public class InterfaceProcessor extends AbstractProcessor {
                   .append(indent(shift++)).append("try {\n");
         }
         if(propertySupport) {
-            writer.append(indent(shift)).append("newValue = ").append(retain(property)).append(";\n");
+            writer.append(indent(shift)).append("newValue = ").append(retain(attribute)).append(";\n");
             writer.append(indent(shift)).append("oldValue = this.").append(fieldName).append(";\n");
             writer.append(indent(shift)).append("this.").append(fieldName).append(" = newValue;\n");
         } else {
-            writer.append(indent(shift)).append("this.").append(fieldName).append(" = ").append(retain(property)).append(";\n");
+            writer.append(indent(shift)).append("this.").append(fieldName).append(" = ").append(retain(attribute)).append(";\n");
         }
         if(propertySupport) {
             writer.append(indent(shift)).append("isPropertyChanged = (oldValue != newValue");
-            if(!isPrimitive(property.getType())) {
+            if(!isPrimitive(attribute.getType())) {
                 writer.append(" && (").append("oldValue != null && !oldValue.equals(newValue))");
             }
             writer.append(");\n");
@@ -213,7 +227,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         //generate code for firing PropertyChangeEvent
         if(propertySupport) {
             writer.append(indent(shift)).append("if (isPropertyChanged) {\n")
-                  .append(indent(++shift)).append("this.propertySupport.firePropertyChange(\"").append(property.getName()).append("\", oldValue, newValue);\n")
+                  .append(indent(++shift)).append("this.propertySupport.firePropertyChange(\"").append(attribute.getName()).append("\", oldValue, newValue);\n")
                   .append(indent(--shift)).append("}\n");
         }
         writer.append(indent(--shift)).append("}\n\n");
@@ -278,7 +292,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         return false;
     }
 
-    protected final boolean isAbstract(AnnotationMirror annotation, InterfaceDefinition definition) {
+    protected final boolean isAbstract(AnnotationMirror annotation, ClassDefinition definition) {
         Elements elementUtils = processingEnv.getElementUtils();
         Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
         AnnotationValue isAbstractAttribute = getValueOfAnnotation(annotationValueMap, IS_ABSTRACT);
@@ -292,11 +306,11 @@ public class InterfaceProcessor extends AbstractProcessor {
         return isAbstract || !(definition.getMethods().isEmpty() && !definition.isHavingIgnoredProperty());
     }
 
-    protected boolean precheck(InterfaceDefinition definition, AnnotationMirror annotation, String className, Element element) {
+    protected boolean precheck(ClassDefinition definition, AnnotationMirror annotation, String className, Element element) {
         return true;
     }
-
-    protected void generateClassDefinition(Writer writer, AnnotationMirror annotation, InterfaceDefinition definition, String className, Element element) throws IOException {
+    
+    protected void generateClassDefinition(Writer writer, AnnotationMirror annotation, ClassDefinition definition, String className, Element element) throws IOException {
         Elements elementUtils = processingEnv.getElementUtils();
 
         String packageName = resolvePackageName(annotation, definition);
@@ -306,21 +320,36 @@ public class InterfaceProcessor extends AbstractProcessor {
         writer.append("@javax.annotation.Generated(value = \"" + this.getClass().getName() + "\", date = \"" + generationTime + "\")\n");
         writer.append("public ").append(isAbstract(annotation, definition) ? "abstract " : "").append("class ").append(className);
 
+        boolean extended = false;
+        boolean implemented = false;
+        
         Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
         String superClassName = getSuperClassValue(annotationValueMap);
         if(!superClassName.isEmpty()) {
             writer.append(" extends ").append(superClassName);
+            extended = true;
+        }
+        
+        switch(definition.getElementType()) {
+            case CLASS:
+                extended = true;
+                break;
+            case INTERFACE:
+                implemented = true;
+                break;
         }
 
-        writer.append(" implements ").append(definition.getPackage() + "." + definition.getInterfaceName());
+        writer.append(" ").append(definition.getElementType().getExtendString()).append(" ").append(definition.getPackage() + "." + definition.getClassName());
 
         boolean isSerializable = isSerializable(annotation);
         if(isSerializable) {
-            writer.append(", java.io.Serializable");
+            writer.append(getBindString(implemented)).append("java.io.Serializable");
+            implemented = true;
         }
 
         if(isCloneable(annotation)) {
-            writer.append(", java.lang.Cloneable");
+            writer.append(getBindString(implemented)).append("java.lang.Cloneable");
+            implemented = true;
         }
 
         writer.append(" {\n");
@@ -331,12 +360,16 @@ public class InterfaceProcessor extends AbstractProcessor {
             writer.append(indent(1)).append("private static final long serialVersionUID = ").append(version.toString()).append("L;\n");
         }
     }
+    
+    private String getBindString(boolean implemented) {
+        return implemented ? ", " : " implements ";
+    }
 
-    protected int generateFields(Writer writer, int shift, AnnotationMirror annotation, InterfaceDefinition definition, TypeElement targetInterface, FieldModifier modifier) throws IOException {
+    protected int generateFields(Writer writer, int shift, AnnotationMirror annotation, ClassDefinition definition, TypeElement targetInterface, Modifier modifier) throws IOException {
         Elements elementUtils = processingEnv.getElementUtils();
 
         for (Property property : definition.getProperties()) {
-            if(!property.isIgnored()) {
+            if(!property.isIgnored() && !property.isFieldDefined()) {
                 shift = generateField(property, writer, shift, modifier);
             }
         }
@@ -365,22 +398,34 @@ public class InterfaceProcessor extends AbstractProcessor {
         writer.append(indent(shift)).append("protected final ").append(supportClass.toString()).append(" propertySupport;\n");
     }
 
-    protected int generatePropertyAccessors(Writer writer, int shift, AnnotationMirror annotation, InterfaceDefinition definition, TypeElement targetInterface) throws IOException {
+    protected int generatePropertyAccessors(Writer writer, int shift, AnnotationMirror annotation, ClassDefinition definition, TypeElement targetInterface) throws IOException {
+        Types typeUtils = processingEnv.getTypeUtils();
+        
+        for (Field field : definition.getInnerFields(typeUtils)) {
+            if(!field.isIgnored()) {
+                Modifier methodModifier = Modifier.valueOf(field.getMethodModifier());
+                shift = generateGetter(writer, shift, targetInterface, annotation, field, definition, methodModifier);
+                if(!field.isReadOnly()) {
+                    shift = generateSetter(writer, shift, targetInterface, annotation, field, definition, methodModifier);
+                }
+            }
+        }
+        
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
                 if(property.isReadable()) {
-                    shift = generateGetter(writer, shift, targetInterface, annotation, property);
+                    shift = generateGetter(writer, shift, targetInterface, annotation, property, definition, Modifier.PUBLIC);
                 }
 
                 if(property.isWritable()) {
-                    shift = generateSetter(writer, shift, targetInterface, annotation, property);
+                    shift = generateSetter(writer, shift, targetInterface, annotation, property, definition, Modifier.PUBLIC);
                 }
             }
         }
         return shift;
     }
 
-    protected int generateConstructors(Writer writer, int shift, AnnotationMirror generateClassAnnotation, InterfaceDefinition definition, String className, TypeElement targetInterface) throws IOException {
+    protected int generateConstructors(Writer writer, int shift, AnnotationMirror generateClassAnnotation, ClassDefinition definition, String className, TypeElement targetInterface) throws IOException {
         shift = generateFullArgConstructor(writer, shift, className, definition, targetInterface);
 
         int propertyCount = 0;
@@ -410,19 +455,32 @@ public class InterfaceProcessor extends AbstractProcessor {
         writer.append(indent(shift)).append("this.propertySupport = ").append("new ").append(type.toString()).append("(this);\n");
         return shift;
     }
-
-    protected int generatePropertyFieldInitializer(Writer writer, int shift, TypeElement element, Property property) throws IOException {
-        writer.append(indent(shift)).append("this.").append(toSafeName(property.getName())).append(" = ").append(retain(property)).append(";\n");
+    
+    protected int generateFieldInitializer(Writer writer, int shift, TypeElement element, Attribute attribute) throws IOException {
+        writer.append(indent(shift)).append("this.").append(toSafeName(attribute.getName())).append(" = ").append(retain(attribute)).append(";\n");
         return shift;
     }
 
-    protected int generateFullArgConstructor(Writer writer, int shift, String className, InterfaceDefinition definition, TypeElement element) throws IOException {
+    protected int generateFullArgConstructor(Writer writer, int shift, String className, ClassDefinition definition, TypeElement element) throws IOException {
         Elements elementUtils = processingEnv.getElementUtils();
+        Types typeUtils = processingEnv.getTypeUtils();
 
         writer.append(indent(shift)).append("public ").append(className).append("(");
         boolean isFirst = true;
+        for (Field field : definition.getInnerFields(typeUtils)) {
+            if(!field.isIgnored()) {
+                String type = field.getType().toString();
+                if(!isFirst) {
+                    writer.append(", ");
+                } else {
+                    isFirst = false;
+                }
+                writer.append(type).append(" ").append(toSafeName(field.getName()));
+            }
+        }
+        
         for (Property property : definition.getProperties()) {
-            if(!property.isIgnored() && canInitializeField(property, ConstructorGenerationType.FULL_ARG_CONSTRUCTOR, ConstructorGenerationPhase.CONSTRUCTOR_ARGUMENTS)) {
+            if(!property.isIgnored() && !property.isFieldDefined() && canInitializeField(property, ConstructorGenerationType.FULL_ARG_CONSTRUCTOR, ConstructorGenerationPhase.CONSTRUCTOR_ARGUMENTS)) {
                 String type = property.getType().toString();
                 if(!isFirst) {
                     writer.append(", ");
@@ -434,9 +492,16 @@ public class InterfaceProcessor extends AbstractProcessor {
         }
         writer.append(") {\n");
         writer.append(indent(++shift)).append("super();\n");
+        
+        for (Field field : definition.getInnerFields(typeUtils)) {
+            if(!field.isIgnored()) {
+                shift = generateFieldInitializer(writer, shift, element, field);
+            }
+        }
+        
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored() && canInitializeField(property, ConstructorGenerationType.FULL_ARG_CONSTRUCTOR, ConstructorGenerationPhase.FIELD_INITALIZATION)) {
-                shift = generatePropertyFieldInitializer(writer, shift, element, property);
+                shift = generateFieldInitializer(writer, shift, element, property);
             }
         }
 
@@ -459,11 +524,25 @@ public class InterfaceProcessor extends AbstractProcessor {
      * @return last indent-count
      * @throws IOException occurs when this method could not write to a writer.
      */
-    protected int generateReadOnlyFieldConstructor(Writer writer, int shift, String className, InterfaceDefinition definition, TypeElement element) throws IOException {
+    protected int generateReadOnlyFieldConstructor(Writer writer, int shift, String className, ClassDefinition definition, TypeElement element) throws IOException {
         Elements elementUtils = processingEnv.getElementUtils();
-
+        Types typeUtils = processingEnv.getTypeUtils();
+        
         writer.append(indent(shift)).append("public ").append(className).append("(");
         boolean isFirst = true;
+        
+        for (Field field : definition.getInnerFields(typeUtils)) {
+            if(!field.isIgnored()) {
+                String type = field.getType().toString();
+                if(!isFirst) {
+                    writer.append(", ");
+                } else {
+                    isFirst = false;
+                }
+                writer.append(type).append(" ").append(toSafeName(field.getName()));
+            }
+        }
+        
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
                 if(isReadOnlyProperty(property) && canInitializeField(property, ConstructorGenerationType.READ_ONLY_CONSTRUCTOR, ConstructorGenerationPhase.CONSTRUCTOR_ARGUMENTS)) {
@@ -480,10 +559,17 @@ public class InterfaceProcessor extends AbstractProcessor {
         writer.append(") {\n");
         shift++;
         writer.append(indent(shift)).append("super();\n");
+        
+        for (Field field : definition.getInnerFields(typeUtils)) {
+            if(!field.isIgnored()) {
+                shift = generateFieldInitializer(writer, shift, element, field);
+            }
+        }
+        
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
                 if(isReadOnlyProperty(property) && canInitializeField(property, ConstructorGenerationType.READ_ONLY_CONSTRUCTOR, ConstructorGenerationPhase.FIELD_INITALIZATION)) {
-                    shift = generatePropertyFieldInitializer(writer, shift, element, property);
+                    shift = generateFieldInitializer(writer, shift, element, property);
                 }
             }
         }
@@ -504,14 +590,14 @@ public class InterfaceProcessor extends AbstractProcessor {
         return true;
     }
 
-    protected int generateDefaultConstructor(Writer writer, int shift, String className, InterfaceDefinition definition) throws IOException {
+    protected int generateDefaultConstructor(Writer writer, int shift, String className, ClassDefinition definition) throws IOException {
         writer.append(indent(shift)).append("public ").append(className).append("(").append(") {\n")
               .append(indent(++shift)).append("super();\n")
               .append(indent(--shift)).append("}\n\n");
         return shift;
     }
 
-    protected int generateEquals(Writer writer, int shift, AnnotationMirror annotation, InterfaceDefinition definition, String className, boolean isHavingSuperClass, TypeElement targetInterface) throws IOException {
+    protected int generateEquals(Writer writer, int shift, AnnotationMirror annotation, ClassDefinition definition, String className, boolean isHavingSuperClass, TypeElement targetInterface) throws IOException {
         boolean threadSafe = isThreadSafe(annotation);
 
         writer.append(indent(shift)).append("@Override\n")
@@ -528,10 +614,15 @@ public class InterfaceProcessor extends AbstractProcessor {
             writer.append(indent(shift)).append(INSTANCE_LOCK).append(".readLock().lock();\n")
                   .append(indent(shift++)).append("try {\n");
         }
+        Types typeUtils = processingEnv.getTypeUtils();
+        for (Field field : definition.getInnerFields(typeUtils)) {
+            //We must generate equals() for all inner fields including 'ignore=true' fields.
+            shift = generateEqualForOneAttribute(field, writer, shift);
+        }
 
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
-                shift = generateEqualForOneProperty(property, writer, shift);
+                shift = generateEqualForOneAttribute(property, writer, shift);
             }
         }
 
@@ -552,10 +643,10 @@ public class InterfaceProcessor extends AbstractProcessor {
         return shift;
     }
 
-    protected int generateEqualForOneProperty(Property property, Writer writer, int shift) throws IOException {
-        final String fieldName = toSafeName(property.getName());
-        if(isPrimitive(property.getType())) {
-            switch(property.getType().getKind()) {
+    protected int generateEqualForOneAttribute(Attribute attribute, Writer writer, int shift) throws IOException {
+        final String fieldName = toSafeName(attribute.getName());
+        if(isPrimitive(attribute.getType())) {
+            switch(attribute.getType().getKind()) {
                 case FLOAT:
                     writer.append(indent(shift)).append("if (Float.floatToIntBits(this.").append(fieldName).append(") != Float.floatToIntBits(other.").append(fieldName).append(")) {\n")
                         .append(indent(++shift)).append("return false;\n")
@@ -579,7 +670,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         return shift;
     }
 
-    protected int generateHashCode(Writer writer, int shift, AnnotationMirror annotation, InterfaceDefinition definition, String className, boolean isHavingSuperClass, TypeElement targetInterface) throws IOException {
+    protected int generateHashCode(Writer writer, int shift, AnnotationMirror annotation, ClassDefinition definition, String className, boolean isHavingSuperClass, TypeElement targetInterface) throws IOException {
         boolean threadSafe = isThreadSafe(annotation);
         writer.append(indent(shift)).append("@Override\n")
               .append(indent(shift)).append("public int hashCode() {\n")
@@ -589,10 +680,17 @@ public class InterfaceProcessor extends AbstractProcessor {
             writer.append(indent(shift)).append(INSTANCE_LOCK).append(".readLock().lock();\n")
                   .append(indent(shift++)).append("try {\n");
         }
+        
+        Types typeUtils = processingEnv.getTypeUtils();
+        
+        for (Field field : definition.getInnerFields(typeUtils)) {
+            //We must generate hashCode for all inner fields including 'ignore=true' fields.
+            generateHashCodeForOneAttribute(field, writer, shift);
+        }
 
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
-                generateHashCodeForOneProperty(property, writer, shift);
+                generateHashCodeForOneAttribute(property, writer, shift);
             }
         }
 
@@ -612,11 +710,11 @@ public class InterfaceProcessor extends AbstractProcessor {
         return shift;
     }
 
-    protected void generateHashCodeForOneProperty(Property property, Writer writer, int shift) throws IOException {
-        final String fieldName = toSafeName(property.getName());
+    protected void generateHashCodeForOneAttribute(Attribute attribute, Writer writer, int shift) throws IOException {
+        final String fieldName = toSafeName(attribute.getName());
         String expression = null;
-        if(isPrimitive(property.getType())) {
-            switch(property.getType().getKind()) {
+        if(isPrimitive(attribute.getType())) {
+            switch(attribute.getType().getKind()) {
                 case FLOAT:
                     expression = "Float.floatToIntBits(this." + fieldName + ")";
                     break;
@@ -638,9 +736,10 @@ public class InterfaceProcessor extends AbstractProcessor {
         writer.append(indent(shift)).append("result = 31 * result + ").append(expression).append(";\n");
     }
 
-    protected int generateToString(Writer writer, int shift, AnnotationMirror annotation, InterfaceDefinition definition, String className, boolean isHavinsSuperClass, TypeElement targetInterface) throws IOException {
+    protected int generateToString(Writer writer, int shift, AnnotationMirror annotation, ClassDefinition definition, String className, boolean isHavinsSuperClass, TypeElement targetInterface) throws IOException {
         boolean threadSafe = isThreadSafe(annotation);
-
+        Types typeUtils = processingEnv.getTypeUtils();
+        
         writer.append(indent(shift)).append("@Override\n")
               .append(indent(shift++)).append("public String toString() {\n");
 
@@ -653,12 +752,16 @@ public class InterfaceProcessor extends AbstractProcessor {
 
         shift++;
         boolean isFirst = true;
+        
+        for (Field field : definition.getInnerFields(typeUtils)) {
+            //We must generate toString() for all inner fields including 'ignore=true' fields.
+            shift = generateToStringForOneAttribute(isFirst, field, writer, shift);
+            if(isFirst) isFirst = false;
+        }
+        
         for (Property property : definition.getProperties()) {
             if(!property.isIgnored()) {
-                final String safeName = toSafeName(property.getName());
-                writer.append(indent(shift)).append(" + \"");
-                if(!isFirst) writer.append(", ");
-                writer.append(safeName).append("=\" + ").append(safeName).append("\n");
+                shift = generateToStringForOneAttribute(isFirst, property, writer, shift);
                 if(isFirst) isFirst = false;
             }
         }
@@ -681,8 +784,16 @@ public class InterfaceProcessor extends AbstractProcessor {
 
         return shift;
     }
+    
+    protected int generateToStringForOneAttribute(boolean isFirst, Attribute attribute, Writer writer, int shift) throws IOException {
+        final String safeName = toSafeName(attribute.getName());
+        writer.append(indent(shift)).append(" + \"");
+        if(!isFirst) writer.append(", ");
+        writer.append(safeName).append("=\" + ").append(safeName).append("\n");
+        return shift;
+    }
 
-    protected int generateClone(Writer writer, int shift, AnnotationMirror annotation, InterfaceDefinition definition, String className) throws IOException {
+    protected int generateClone(Writer writer, int shift, AnnotationMirror annotation, ClassDefinition definition, String className) throws IOException {
         Elements elementUtils = processingEnv.getElementUtils();
 
         Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap = elementUtils.getElementValuesWithDefaults(annotation);
@@ -704,7 +815,7 @@ public class InterfaceProcessor extends AbstractProcessor {
         return shift;
     }
 
-    protected int generatePropertyListenerAccessors(Writer writer, int shift, InterfaceDefinition definition, TypeElement targetInterface) throws IOException {
+    protected int generatePropertyListenerAccessors(Writer writer, int shift, ClassDefinition definition, TypeElement targetInterface) throws IOException {
         writer.append(indent(shift)).append("@Override\n")
               .append(indent(shift++)).append("public void addPropertyChangeListener(java.beans.PropertyChangeListener... listeners) {\n")
               .append(indent(shift)).append("if(listeners == null) throw new IllegalArgumentException(\"the argument 'listeners' should not be null.\");\n")
@@ -771,7 +882,7 @@ public class InterfaceProcessor extends AbstractProcessor {
      * @return a number of indents.
      * @throws IOException if writer could not write to buffer for any reason.
      */
-    protected int generateOthers(Writer writer, int shift, AnnotationMirror annotation, InterfaceDefinition definition, String className, boolean isHavingSuperClass, TypeElement targetInterface) throws IOException {
+    protected int generateOthers(Writer writer, int shift, AnnotationMirror annotation, ClassDefinition definition, String className, boolean isHavingSuperClass, TypeElement targetInterface) throws IOException {
         return shift;
     }
 
@@ -818,18 +929,18 @@ public class InterfaceProcessor extends AbstractProcessor {
     }
 
 
-    protected final String retain(Property property) {
-        return retain(property, "");
+    protected final String retain(Attribute attribute) {
+        return retain(attribute, "");
     }
 
-    protected final String retain(Property property, String prefix) {
-        assert property != null;
+    protected final String retain(Attribute attribute, String prefix) {
+        assert attribute != null;
 
-        String safeName = prefix + toSafeName(property.getName());
-        if(isPrimitive(property.getType())) return safeName;
+        String safeName = prefix + toSafeName(attribute.getName());
+        if(isPrimitive(attribute.getType())) return safeName;
 
-        RetainType type = RetainType.valueOf(property.getRetainType());
-        return type.codeFor(safeName, property);
+        RetainType type = RetainType.valueOf(attribute.getRetainType());
+        return type.codeFor(safeName, attribute);
     }
 
     protected final String toSafeName(String word) {
@@ -871,13 +982,13 @@ public class InterfaceProcessor extends AbstractProcessor {
         return sb.toString();
     }
 
-    protected String resolvePackageName(AnnotationMirror generateClassAnnotation, InterfaceDefinition definition) {
+    protected String resolvePackageName(AnnotationMirror generateClassAnnotation, ClassDefinition definition) {
         String interfacePackageName = definition.getPackage();
         String packageName = getPackageName(generateClassAnnotation);
         boolean isRelative = isPackageNameRelative(generateClassAnnotation);
 
         if(packageName.isEmpty()) {
-            return interfacePackageName + ".impl";
+            return interfacePackageName;
         } else {
             if(isRelative) {
                 return interfacePackageName + "." + packageName;
@@ -910,10 +1021,10 @@ public class InterfaceProcessor extends AbstractProcessor {
         }
     }
 
-    protected String resolveImplementationClassName(GenerateClass annotation, AnnotationMirror generateClassAnnotation, InterfaceDefinition definition) {
+    protected String resolveImplementationClassName(GenerateClass annotation, AnnotationMirror generateClassAnnotation, ClassDefinition definition) {
         Elements elementUtils = processingEnv.getElementUtils();
 
-        String interfaceName = definition.getInterfaceName();
+        String interfaceName = definition.getClassName();
         String className = annotation.className();
         if(className.isEmpty()) {
             AnnotationValue resolverValue = getValueOfAnnotation(elementUtils.getElementValuesWithDefaults(generateClassAnnotation), "classNameResolver");

@@ -16,29 +16,27 @@
 package com.shelfmap.interfaceprocessor;
 
 import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.type.TypeMirror;
 
 /**
  *
  * @author Tsutomu YANO
  */
-public interface Property {
+public interface Property extends Attribute {
+    /**
+     * @return true if a property is defined by the interface, not by superclasses.
+     */
     boolean isDefined();
     boolean isReadable();
     boolean isWritable();
-
-    String getName();
-    TypeMirror getType();
-
-    String getRetainType();
-    void setRetainType(String type);
-
-    TypeMirror getRealType();
-    void setRealType(TypeMirror type);
     
-    boolean isIgnored();
-    void setIgnored(boolean ignore);
-    
+    /**
+     * return true if a backend field for a property is already defined.
+     * if this is true, processor would not generate a field for this property.
+     * @return true if a backend field for a property is already defined.
+     */
+    boolean isFieldDefined();
+    void setFieldDefined(boolean defined);
+
     ExecutableElement getReader();
     void setReader(ExecutableElement element);
     ExecutableElement getWriter();

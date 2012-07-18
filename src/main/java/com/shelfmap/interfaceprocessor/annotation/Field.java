@@ -13,12 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.shelfmap.interfaceprocessor;
+package com.shelfmap.interfaceprocessor.annotation;
+
+import com.shelfmap.interfaceprocessor.Modifier;
+import com.shelfmap.interfaceprocessor.RetainType;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
 /**
  *
  * @author Tsutomu YANO
  */
-public interface RetainCode {
-    String codeFor(String argName, Attribute attribute);
+@Target(ElementType.FIELD)
+@Retention(RetentionPolicy.SOURCE)
+public @interface Field {
+    RetainType retainType() default RetainType.HOLD;
+    Class<?> realType() default Void.class;
+    boolean ignore() default false;
+    boolean readOnly() default false;
+    Modifier methodModifier() default Modifier.PUBLIC;
 }

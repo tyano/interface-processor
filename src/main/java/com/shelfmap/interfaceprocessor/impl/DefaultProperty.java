@@ -28,6 +28,7 @@ public class DefaultProperty implements Property {
     private boolean defined;
     private boolean writable;
     private boolean readable;
+    private boolean fieldDefined = false;
     private final String name;
     private final TypeMirror type;
     private String retainType = "HOLD";
@@ -59,6 +60,16 @@ public class DefaultProperty implements Property {
     @Override
     public boolean isDefined() {
         return defined;
+    }
+
+    @Override
+    public boolean isFieldDefined() {
+        return fieldDefined;
+    }
+
+    @Override
+    public void setFieldDefined(boolean isFieldDefined) {
+        this.fieldDefined = isFieldDefined;
     }
 
     @Override
@@ -121,5 +132,72 @@ public class DefaultProperty implements Property {
     public void setWriter(ExecutableElement writer) {
         this.writer = writer;
         this.writable = writer != null;
+    }
+
+    @Override
+    public int hashCode() {
+        int hash = 3;
+        hash = 67 * hash + (this.defined ? 1 : 0);
+        hash = 67 * hash + (this.writable ? 1 : 0);
+        hash = 67 * hash + (this.readable ? 1 : 0);
+        hash = 67 * hash + (this.fieldDefined ? 1 : 0);
+        hash = 67 * hash + (this.name != null ? this.name.hashCode() : 0);
+        hash = 67 * hash + (this.type != null ? this.type.hashCode() : 0);
+        hash = 67 * hash + (this.retainType != null ? this.retainType.hashCode() : 0);
+        hash = 67 * hash + (this.realType != null ? this.realType.hashCode() : 0);
+        hash = 67 * hash + (this.ignore ? 1 : 0);
+        hash = 67 * hash + (this.reader != null ? this.reader.hashCode() : 0);
+        hash = 67 * hash + (this.writer != null ? this.writer.hashCode() : 0);
+        return hash;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj == null) {
+            return false;
+        }
+        if (getClass() != obj.getClass()) {
+            return false;
+        }
+        final DefaultProperty other = (DefaultProperty) obj;
+        if (this.defined != other.defined) {
+            return false;
+        }
+        if (this.writable != other.writable) {
+            return false;
+        }
+        if (this.readable != other.readable) {
+            return false;
+        }
+        if (this.fieldDefined != other.fieldDefined) {
+            return false;
+        }
+        if ((this.name == null) ? (other.name != null) : !this.name.equals(other.name)) {
+            return false;
+        }
+        if (this.type != other.type && (this.type == null || !this.type.equals(other.type))) {
+            return false;
+        }
+        if ((this.retainType == null) ? (other.retainType != null) : !this.retainType.equals(other.retainType)) {
+            return false;
+        }
+        if (this.realType != other.realType && (this.realType == null || !this.realType.equals(other.realType))) {
+            return false;
+        }
+        if (this.ignore != other.ignore) {
+            return false;
+        }
+        if (this.reader != other.reader && (this.reader == null || !this.reader.equals(other.reader))) {
+            return false;
+        }
+        if (this.writer != other.writer && (this.writer == null || !this.writer.equals(other.writer))) {
+            return false;
+        }
+        return true;
+    }
+
+    @Override
+    public String toString() {
+        return "DefaultProperty{" + "defined=" + defined + ", writable=" + writable + ", readable=" + readable + ", fieldDefined=" + fieldDefined + ", name=" + name + ", type=" + type + ", retainType=" + retainType + ", realType=" + realType + ", ignore=" + ignore + ", reader=" + reader + ", writer=" + writer + '}';
     }
 }

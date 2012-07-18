@@ -25,16 +25,28 @@ import javax.lang.model.util.Types;
  *
  * @author Tsutomu YANO
  */
-public interface InterfaceDefinition {
+public interface ClassDefinition {
+    ElementType getElementType();
+    void setElementType(ElementType elementType);
+            
     String getPackage();
     void setPackage(String pkg);
 
-    String getInterfaceName();
-    void setInterfaceName(String interfaceName);
+    String getClassName();
+    void setClassName(String interfaceName);
+
+    Collection<Field> getFields();
+    void addFields(Types typeUtil, Field... fields);
+    Field findField(String name, TypeMirror type, Types types);
 
     Collection<Property> getProperties();
-    void addProperties(Property... props);
+    void addProperties(Types typeUtil, Property... props);
     Property findProperty(String name, TypeMirror type, Types types);
+    
+    /**
+     * @return all {@link Field}s which don't have any getter/setter.
+     */
+    Collection<Field> getInnerFields(Types typeUtil);
     
     boolean isHavingIgnoredProperty();
 

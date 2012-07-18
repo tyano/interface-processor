@@ -22,19 +22,19 @@ package com.shelfmap.interfaceprocessor;
 public enum RetainType implements RetainCode {
     HOLD {
         @Override
-        public String codeFor(String argName, Property property) {
+        public String codeFor(String argName, Attribute attribute) {
             return argName;
         }
     },
     NEW {
         @Override
-        public String codeFor(String argName, Property property) {
-            return "new " + property.getRealType().toString() + "(" + argName + ")";
+        public String codeFor(String argName, Attribute attribute) {
+            return "new " + attribute.getRealType().toString() + "(" + argName + ")";
         }
     },
     CLONE {
         @Override
-        public String codeFor(String argName, Property property) {
+        public String codeFor(String argName, Attribute attribute) {
             return argName + ".clone()";
         }
     };

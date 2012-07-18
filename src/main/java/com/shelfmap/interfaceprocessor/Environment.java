@@ -23,7 +23,7 @@ import javax.annotation.processing.ProcessingEnvironment;
  */
 public interface Environment {
     ProcessingEnvironment getProcessingEnvironment();
-    InterfaceDefinition getInterfaceDefinition();
+    ClassDefinition getClassDefinition();
     int getLevel();
     void setLevel(int level);
 }

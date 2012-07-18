@@ -16,7 +16,7 @@
 package com.shelfmap.interfaceprocessor.impl;
 
 import com.shelfmap.interfaceprocessor.Environment;
-import com.shelfmap.interfaceprocessor.InterfaceDefinition;
+import com.shelfmap.interfaceprocessor.ClassDefinition;
 import javax.annotation.processing.ProcessingEnvironment;
 
 
@@ -27,10 +27,10 @@ import javax.annotation.processing.ProcessingEnvironment;
 public class BuildingEnvironment implements Environment {
 
     private final ProcessingEnvironment p;
-    private final InterfaceDefinition def;
+    private final ClassDefinition def;
     private int level = 0;
 
-    public BuildingEnvironment(ProcessingEnvironment p, InterfaceDefinition def) {
+    public BuildingEnvironment(ProcessingEnvironment p, ClassDefinition def) {
         this.p = p;
         this.def = def;
     }
@@ -41,7 +41,7 @@ public class BuildingEnvironment implements Environment {
     }
 
     @Override
-    public InterfaceDefinition getInterfaceDefinition() {
+    public ClassDefinition getClassDefinition() {
         return def;
     }
 
