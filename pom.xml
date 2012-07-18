@@ -4,11 +4,11 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.shelfmap</groupId>
-    <artifactId>classprocessor</artifactId>
+    <artifactId>interface-processor</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>classprocessor</name>
+    <name>interface-processor</name>
     <url>http://maven.apache.org</url>
     <licenses>
         <license>
